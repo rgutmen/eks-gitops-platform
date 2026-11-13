@@ -29,13 +29,13 @@ test: unit
 # Destroy order: transfer -> workload-iam -> eks -> network -> sftp
 #
 # Every apply/destroy shows the plan and asks for confirmation.
-# Usage: make infra-deploy REGION=eu-west-1 [AWS_PROFILE=...]
+# Usage: make infra-deploy [REGION=eu-west-1]   (defaults to $AWS_REGION)
 
 INFRA     := infra
 STACKS    := sftp network eks workload-iam transfer
 TOFU      ?= tofu
 TF         = $(TOFU) -chdir=$(INFRA)/$(1)
-REGION    ?=
+REGION    ?= $(AWS_REGION)
 
 define require_region
 	@test -n "$(REGION)" || (echo "REGION is required, e.g. make $@ REGION=eu-west-1"; exit 1)
