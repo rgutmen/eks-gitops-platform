@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars (git-ignored) and adjust. OpenTofu loads it automatically.
+# region comes from AWS_REGION through the Makefile.
+
+name         = "eks-platform"
+cluster_name = "eks-platform" # must match cluster_name in infra/eks
+
+vpc_cidr = "10.20.0.0/16"
+az_count = 2
+
+# true: one NAT gateway (~35 USD/month). false: one per AZ (resilient, ~35 USD each).
+single_nat_gateway = true

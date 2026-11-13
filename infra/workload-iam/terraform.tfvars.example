@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars (git-ignored) and adjust. OpenTofu loads it automatically.
+# region and every *_arn input come from the Makefile (AWS_REGION and the eks
+# and sftp stack outputs). Do not set them here.
+
+name = "sftp-platform"
+
+# Kubernetes identities allowed to assume each role (namespace:serviceaccount).
+worker_service_account = "sftp-platform:pgp-worker"
+keda_service_account   = "keda:keda-operator"
+
+pgp_secret_prefix = "sftp/"

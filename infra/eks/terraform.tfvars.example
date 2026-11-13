@@ -1,0 +1,24 @@
+# Copy to terraform.tfvars (git-ignored) and adjust. OpenTofu loads it automatically.
+# region, vpc_id and private_subnet_ids come from the Makefile (AWS_REGION and the
+# network stack outputs). Do not set them here.
+
+cluster_name       = "eks-platform"
+kubernetes_version = "1.34"
+
+# Who gets cluster-admin. Without at least one entry nobody can use kubectl.
+# Get your identity with: aws sts get-caller-identity
+#   IAM user:    "arn:aws:iam::111111111111:user/your-user"
+#   SSO / role:  "arn:aws:iam::111111111111:role/YourRoleName"
+#                (not the arn:aws:sts::...:assumed-role/... form)
+admin_principal_arns = [
+  "arn:aws:iam::111111111111:user/your-user",
+]
+
+# Who may reach the Kubernetes API from the internet. Empty = private only
+# (kubectl must run from inside the VPC). Your public IP: curl -s https://checkip.amazonaws.com
+public_endpoint_cidrs = [
+  "203.0.113.10/32",
+]
+
+system_instance_types = ["t3.large"]
+system_node_count     = 2

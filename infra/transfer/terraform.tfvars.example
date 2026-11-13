@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars (git-ignored) and adjust. OpenTofu loads it automatically.
+# region and inbound_bucket_arn come from the Makefile (AWS_REGION and the sftp
+# stack outputs). Do not set them here.
+
+name = "sftp-platform"
+
+# Must not overlap the EKS VPC (10.20.0.0/16 by default).
+vpc_cidr = "10.30.0.0/25"
+
+log_retention_days = 90

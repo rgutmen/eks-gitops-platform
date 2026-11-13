@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars (git-ignored) and adjust. OpenTofu loads it automatically.
+# region comes from AWS_REGION through the Makefile.
+
+name = "sftp-platform"
+
+# Compliance archive: replicate uploads to Glacier Deep Archive with Object Lock
+# COMPLIANCE. WARNING: archived objects cannot be deleted by anyone until the
+# retention ends, and you pay for them during that time.
+archive_enabled         = false
+archive_retention_years = 7
+
+decrypted_retention_days = 30
+
+queue_visibility_timeout = 300
+queue_max_receive_count  = 3
+
+# Keep true for real data. Set to false / true only in disposable environments.
+catalog_deletion_protection = true
+force_destroy_inbound       = false
