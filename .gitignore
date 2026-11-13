@@ -30,3 +30,4 @@ crash.*.log
 .DS_Store
 .coverage
 htmlcov/
+.terraform.lock.hcl
