@@ -5,7 +5,7 @@ Every write is a conditional put on that revision, so concurrent operators can
 never overwrite each other and prefix isolation is checked against a
 consistent snapshot of all users.
 
-Only the secret_ref is stored per user. The PGP private key and passphrase
+Only secret references are stored (user default and per-mapping). The PGP private key and passphrase
 live in AWS Secrets Manager and are never written to this table.
 
 A user in "pending" state blocks further changes until the Transfer Family
@@ -16,7 +16,7 @@ lock expiry, so a stalled process can never resume after losing its lock.
 import json
 from dataclasses import asdict, replace
 
-from sftp_platform.domain import SFTPUser, check_constraints, validate
+from sftp_platform.domain import SFTPUser, check_constraints, user_from_dict, validate
 
 CATALOG_KEY = "catalog"
 MAX_DOCUMENT_BYTES = 300 * 1024
@@ -30,7 +30,7 @@ def load_catalog(table) -> tuple[dict[str, SFTPUser], int, bool]:
     item = table.get_item(Key={"pk": CATALOG_KEY}, ConsistentRead=True).get("Item")
     if item is None:
         return {}, 0, False
-    users = {name: SFTPUser(**fields) for name, fields in json.loads(item["document"]).items()}
+    users = {name: user_from_dict(fields) for name, fields in json.loads(item["document"]).items()}
     return users, int(item["revision"]), True
 
 

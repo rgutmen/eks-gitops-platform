@@ -3,7 +3,7 @@ import struct
 
 import pytest
 
-from sftp_platform.domain import Catalog, SFTPUser, overlaps, valid_key, validate
+from sftp_platform.domain import Catalog, Mapping, SFTPUser, overlaps, valid_key, validate
 
 BUCKETS = ["sftp-inbound"]
 KEY = "ssh-ed25519 " + base64.b64encode(
@@ -11,8 +11,9 @@ KEY = "ssh-ed25519 " + base64.b64encode(
 ).decode()
 
 
-def make_user(username="alba", prefix="alba/inbox", **overrides):
-    return SFTPUser(username, KEY, "sftp-inbound", prefix, **overrides)
+def make_user(username="alba", prefix="alba/inbox", pgp="off", **overrides):
+    mapping = Mapping("/inbox", "sftp-inbound", prefix, pgp=pgp)
+    return SFTPUser(username, KEY, [mapping], **overrides)
 
 
 def test_valid_user_passes():
@@ -42,11 +43,11 @@ def test_rejects_unsafe_prefix(prefix):
 
 
 def test_pgp_requires_scoped_secret_ref():
-    with pytest.raises(ValueError, match="secret reference"):
-        validate(make_user(pgp_enabled=True), BUCKETS)
+    with pytest.raises(ValueError, match="default key"):
+        validate(make_user(pgp="inherit"), BUCKETS)
     with pytest.raises(ValueError, match="namespace"):
-        validate(make_user(pgp_enabled=True, secret_ref="other/key"), BUCKETS)
-    validate(make_user(pgp_enabled=True, secret_ref="sftp/alba"), BUCKETS)
+        validate(make_user(pgp="other/key"), BUCKETS)
+    validate(make_user(pgp="inherit", pgp_secret_ref="sftp/alba"), BUCKETS)
 
 
 @pytest.mark.parametrize(
@@ -64,7 +65,7 @@ def test_catalog_create_edit_duplicate_and_reload(tmp_path):
     with pytest.raises(ValueError, match="exists"):
         catalog.save(make_user())
     catalog.save(make_user(prefix="alba/new"), edit=True)
-    assert Catalog(catalog.path, BUCKETS).users["alba"].prefix == "alba/new"
+    assert Catalog(catalog.path, BUCKETS).users["alba"].mappings[0].prefix == "alba/new"
     assert (catalog.path.stat().st_mode & 0o777) == 0o600
 
 

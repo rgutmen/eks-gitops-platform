@@ -1,36 +1,38 @@
 """PGP decryption worker for files uploaded through AWS Transfer Family.
 
-Scans each PGP-enabled user's S3 prefix, decrypts new .pgp/.gpg objects with
-the user's private key from Secrets Manager and writes the plaintext under
-_output/<username>/, outside any user's SFTP home. Re-runs are idempotent:
-the output key is derived from the source key and ETag.
+Event flow: S3 Object Created -> EventBridge rule -> SQS -> Lambda.
+Each event names one object. The worker finds which user mapping owns it,
+resolves the PGP key for that mapping and writes the plaintext under
+_output/<username>/, outside any user's SFTP tree.
+
+Error contract with SQS:
+  - Objects that can never be processed (no owner, PGP off, not .pgp/.gpg,
+    user not applied) are ignored and the message is acknowledged.
+  - Every other failure raises, so SQS retries the message and finally moves
+    it to the dead-letter queue.
+
+Re-delivery is safe: the output key is derived from the source key and ETag,
+and an existing output is skipped.
 """
 
 import json
 import subprocess
 import tempfile
-import time
 from hashlib import sha256
 from pathlib import Path
 
-from sftp_platform.domain import SFTPUser, validate
+from sftp_platform.domain import Mapping, SFTPUser, resolve_pgp
 
 MAX_BYTES = 10 * 1024 * 1024
-MAX_FILES = 20
 GPG_TIMEOUT = 20
-DEADLINE_MARGIN = 50
 OUTPUT_ROOT = "_output"
 SECRET_NAMESPACE = "sftp/"
+PGP_SUFFIXES = (".pgp", ".gpg")
 
 
 class S3Store:
     def __init__(self, client):
         self.client = client
-
-    def pending(self, bucket: str, prefix: str):
-        pages = self.client.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix)
-        for page in pages:
-            yield from page.get("Contents", [])
 
     def exists(self, bucket: str, key: str) -> bool:
         try:
@@ -98,44 +100,31 @@ def output_key(user: SFTPUser, key: str, etag: str) -> str:
     return f"{OUTPUT_ROOT}/{user.username}/{identity}.plain"
 
 
-def _is_candidate(user: SFTPUser, key: str) -> bool:
-    return key.startswith(user.prefix + "/") and key.endswith((".pgp", ".gpg"))
-
-
-def _process(user: SFTPUser, item: dict, store: S3Store, secrets: SecretStore) -> str:
-    destination = output_key(user, item["Key"], item.get("ETag", ""))
-    if store.exists(user.bucket, destination):
-        return "skipped"
-    try:
-        if item["Size"] > MAX_BYTES:
-            raise ValueError("size limit")
-        encrypted = store.read(user.bucket, item["Key"], MAX_BYTES)
-        store.write(user.bucket, destination, decrypt(encrypted, secrets.get(user.secret_ref)))
-        return "processed"
-    except Exception:
-        return "failed"
-
-
-def scan(users, store, secrets, buckets, emit=print, deadline=None) -> dict:
-    """Process pending files for applied, PGP-enabled users within time and count budgets."""
-    counts = {"processed": 0, "failed": 0, "skipped": 0}
-    remaining = MAX_FILES
-    deadline = deadline or time.monotonic() + 180
+def find_owner(users, bucket: str, key: str) -> tuple[SFTPUser, Mapping] | None:
+    """Return the user and mapping whose S3 location contains this object."""
     for user in users:
-        validate(user, buckets)
-        if not user.pgp_enabled or user.status != "applied":
-            continue
-        for item in store.pending(user.bucket, user.prefix + "/"):
-            if remaining <= 0 or time.monotonic() > deadline - DEADLINE_MARGIN:
-                emit(json.dumps(counts))
-                return counts
-            if not _is_candidate(user, item["Key"]):
-                continue
-            remaining -= 1
-            event = _process(user, item, store, secrets)
-            counts[event] += 1
-            if event != "skipped":
-                emit(json.dumps({"event": event, "user": user.username,
-                                 "object_id": sha256(item["Key"].encode()).hexdigest()}))
-    emit(json.dumps(counts))
-    return counts
+        for mapping in user.mappings:
+            if mapping.bucket == bucket and key.startswith(mapping.prefix + "/"):
+                return user, mapping
+    return None
+
+
+def process_object(bucket: str, key: str, etag: str, size: int, users, store, secrets) -> str:
+    """Decrypt one uploaded object. Returns 'processed', 'skipped' or 'ignored'; raises on failure."""
+    if key.startswith(OUTPUT_ROOT + "/") or not key.endswith(PGP_SUFFIXES):
+        return "ignored"
+    owner = find_owner(users, bucket, key)
+    if owner is None:
+        return "ignored"
+    user, mapping = owner
+    secret_ref = resolve_pgp(user, mapping)
+    if user.status != "applied" or secret_ref is None:
+        return "ignored"
+    destination = output_key(user, key, etag)
+    if store.exists(bucket, destination):
+        return "skipped"
+    if size > MAX_BYTES:
+        raise ValueError("size limit")
+    encrypted = store.read(bucket, key, MAX_BYTES)
+    store.write(bucket, destination, decrypt(encrypted, secrets.get(secret_ref)))
+    return "processed"

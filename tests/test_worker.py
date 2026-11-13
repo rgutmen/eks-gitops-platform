@@ -6,7 +6,7 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from sftp_platform.worker import MAX_BYTES, S3Store, SecretStore, decrypt, output_key, scan
+from sftp_platform.worker import MAX_BYTES, S3Store, SecretStore, decrypt, output_key, process_object
 from tests.test_domain import make_user
 
 BUCKET = "sftp-inbound"
@@ -51,9 +51,15 @@ def aws(monkeypatch):
         yield s3, boto3.client("secretsmanager")
 
 
-def applied_user(**overrides):
-    fields = dict(pgp_enabled=True, secret_ref=SECRET_REF, status="applied")
-    return make_user(**(fields | overrides))
+def applied_user(username="alba", prefix="alba/inbox", pgp="inherit", **overrides):
+    fields = dict(pgp_secret_ref=SECRET_REF, status="applied") | overrides
+    return make_user(username, prefix, pgp=pgp, **fields)
+
+
+def put(s3, key, body):
+    s3.put_object(Bucket=BUCKET, Key=key, Body=body)
+    head = s3.head_object(Bucket=BUCKET, Key=key)
+    return BUCKET, key, head["ETag"], head["ContentLength"]
 
 
 def test_decrypt_with_real_gpg(material):
@@ -63,35 +69,34 @@ def test_decrypt_with_real_gpg(material):
         decrypt(encrypted, dict(secret, passphrase="wrong"))
 
 
-def test_scan_decrypts_isolates_and_is_idempotent(aws, material):
+def test_process_decrypts_isolates_and_is_idempotent(aws, material):
     s3, sm = aws
     secret, encrypted = material
     sm.create_secret(Name=SECRET_REF, SecretString=json.dumps(secret))
-    s3.put_object(Bucket=BUCKET, Key="alba/inbox/valid.pgp", Body=encrypted)
-    s3.put_object(Bucket=BUCKET, Key="alba/inbox/corrupt.pgp", Body=b"not pgp")
-    s3.put_object(Bucket=BUCKET, Key="alba/inbox/notes.txt", Body=b"ignored")
-    s3.put_object(Bucket=BUCKET, Key="bruno/inbox/valid.pgp", Body=encrypted)
-    store, secrets, logs = S3Store(s3), SecretStore(sm), []
-    users = [applied_user(), make_user("bruno", "bruno/inbox", status="applied")]
+    users = [applied_user(), applied_user("bruno", "bruno/inbox", pgp="off")]
+    store, secrets = S3Store(s3), SecretStore(sm)
 
-    assert scan(users, store, secrets, [BUCKET], logs.append) == {"processed": 1, "failed": 1, "skipped": 0}
+    valid = put(s3, "alba/inbox/valid.pgp", encrypted)
+    assert process_object(*valid, users, store, secrets) == "processed"
     outputs = s3.list_objects_v2(Bucket=BUCKET, Prefix="_output/")["Contents"]
     assert [o["Key"].split("/")[1] for o in outputs] == ["alba"]
     assert s3.get_object(Bucket=BUCKET, Key=outputs[0]["Key"])["Body"].read() == PLAINTEXT
+    assert process_object(*valid, users, store, secrets) == "skipped"
 
-    assert scan(users, store, secrets, [BUCKET], logs.append) == {"processed": 0, "failed": 1, "skipped": 1}
-    assert "test-pass" not in "".join(logs)
+    assert process_object(*put(s3, "bruno/inbox/valid.pgp", encrypted), users, store, secrets) == "ignored"
+    assert process_object(*put(s3, "alba/inbox/notes.txt", b"x"), users, store, secrets) == "ignored"
+    assert process_object(*put(s3, "nobody/x.pgp", encrypted), users, store, secrets) == "ignored"
+    with pytest.raises(subprocess.CalledProcessError):
+        process_object(*put(s3, "alba/inbox/corrupt.pgp", b"not pgp"), users, store, secrets)
 
 
-def test_skips_users_not_applied_or_without_pgp(aws):
+def test_ignores_users_not_applied(aws):
     s3, sm = aws
-    s3.put_object(Bucket=BUCKET, Key="alba/inbox/x.pgp", Body=b"x")
-    store, secrets = S3Store(s3), SecretStore(sm)
-    for user in [applied_user(status="pending"), applied_user(pgp_enabled=False, secret_ref="")]:
-        assert scan([user], store, secrets, [BUCKET], lambda _: None)["failed"] == 0
+    obj = put(s3, "alba/inbox/x.pgp", b"x")
+    assert process_object(*obj, [applied_user(status="pending")], S3Store(s3), SecretStore(sm)) == "ignored"
 
 
-def test_oversized_object_fails_without_fetching_secret(aws):
+def test_oversized_object_raises_without_fetching_secret(aws):
     s3, _ = aws
 
     class Secrets:
@@ -100,12 +105,9 @@ def test_oversized_object_fails_without_fetching_secret(aws):
         def get(self, ref):
             self.requests.append(ref)
 
-    class LargeListing(S3Store):
-        def pending(self, bucket, prefix):
-            yield {"Key": prefix + "large.pgp", "Size": MAX_BYTES + 1, "ETag": "1"}
-
     secrets = Secrets()
-    assert scan([applied_user()], LargeListing(s3), secrets, [BUCKET], lambda _: None)["failed"] == 1
+    with pytest.raises(ValueError, match="size"):
+        process_object(BUCKET, "alba/inbox/large.pgp", "1", MAX_BYTES + 1, [applied_user()], S3Store(s3), secrets)
     assert secrets.requests == []
 
 
