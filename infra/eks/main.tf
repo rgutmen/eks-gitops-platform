@@ -8,7 +8,7 @@
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 21.0"
+  version = ">= 21.0, < 22.0"
 
   name               = var.cluster_name
   kubernetes_version = var.kubernetes_version
@@ -73,7 +73,7 @@ module "eks" {
 # IRSA role for the EBS CSI driver (persistent volumes for PostgreSQL, Prometheus...).
 module "ebs_csi_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
-  version = "~> 6.0"
+  version = ">= 6.0, < 7.0"
 
   name                  = "${var.cluster_name}-ebs-csi"
   attach_ebs_csi_policy = true

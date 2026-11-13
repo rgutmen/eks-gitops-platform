@@ -33,7 +33,8 @@ test: unit
 
 INFRA     := infra
 STACKS    := sftp network eks workload-iam transfer
-TF         = terraform -chdir=$(INFRA)/$(1)
+TOFU      ?= tofu
+TF         = $(TOFU) -chdir=$(INFRA)/$(1)
 REGION    ?=
 
 define require_region
@@ -56,9 +57,9 @@ WORKLOAD_IAM_VARS = \
 infra-validate:
 	@for stack in $(STACKS); do \
 		echo "== $$stack"; \
-		terraform -chdir=$(INFRA)/$$stack fmt -check -recursive && \
-		terraform -chdir=$(INFRA)/$$stack init -backend=false -input=false >/dev/null && \
-		terraform -chdir=$(INFRA)/$$stack validate || exit 1; \
+		$(TOFU) -chdir=$(INFRA)/$$stack fmt -check -recursive && \
+		$(TOFU) -chdir=$(INFRA)/$$stack init -backend=false -input=false >/dev/null && \
+		$(TOFU) -chdir=$(INFRA)/$$stack validate || exit 1; \
 	done
 
 infra-deploy: deploy-sftp deploy-network deploy-eks deploy-workload-iam deploy-transfer

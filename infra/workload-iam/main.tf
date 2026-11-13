@@ -11,7 +11,7 @@ locals {
 
 module "pgp_worker" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
-  version = "~> 6.0"
+  version = ">= 6.0, < 7.0"
 
   name            = "${var.name}-pgp-worker"
   use_name_prefix = false
@@ -62,7 +62,7 @@ module "pgp_worker" {
 
 module "keda" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
-  version = "~> 6.0"
+  version = ">= 6.0, < 7.0"
 
   name            = "${var.name}-keda"
   use_name_prefix = false
