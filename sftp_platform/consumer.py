@@ -12,6 +12,7 @@ Configuration (environment variables):
   QUEUE_URL         SQS queue receiving the EventBridge events
   CATALOG_TABLE     DynamoDB table holding the user catalog
   ALLOWED_BUCKETS   comma-separated bucket allowlist
+  OUTPUT_BUCKET     bucket receiving decrypted plaintext
   AWS_REGION        AWS region
 AWS credentials come from the pod's ServiceAccount through IRSA.
 """
@@ -30,13 +31,14 @@ WAIT_SECONDS = 20
 
 
 class Consumer:
-    def __init__(self, sqs, table, store, secrets, queue_url: str, buckets: list[str]):
+    def __init__(self, sqs, table, store, secrets, queue_url: str, buckets: list[str], output_bucket: str):
         self.sqs = sqs
         self.table = table
         self.store = store
         self.secrets = secrets
         self.queue_url = queue_url
         self.buckets = buckets
+        self.output_bucket = output_bucket
         self.running = True
 
     def stop(self, *_):
@@ -59,7 +61,8 @@ class Consumer:
                 bucket, key, etag, size = parse_event(message["Body"])
                 if bucket not in self.buckets:
                     raise ValueError("bucket not in allowlist")
-                result = process_object(bucket, key, etag, size, users.values(), self.store, self.secrets)
+                result = process_object(bucket, key, etag, size, users.values(), self.store,
+                                        self.secrets, self.output_bucket)
             except Exception as exc:
                 log("failed", message["MessageId"], error=type(exc).__name__)
                 continue
@@ -88,6 +91,7 @@ def main() -> None:
         secrets=SecretStore(session.client("secretsmanager")),
         queue_url=os.environ["QUEUE_URL"],
         buckets=os.environ["ALLOWED_BUCKETS"].split(","),
+        output_bucket=os.environ["OUTPUT_BUCKET"],
     )
     signal.signal(signal.SIGTERM, consumer.stop)
     signal.signal(signal.SIGINT, consumer.stop)

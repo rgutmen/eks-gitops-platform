@@ -1,9 +1,10 @@
 """PGP decryption worker for files uploaded through AWS Transfer Family.
 
-Event flow: S3 Object Created -> EventBridge rule -> SQS -> Lambda.
+Event flow: S3 Object Created -> EventBridge rule -> SQS -> worker pods (KEDA).
 Each event names one object. The worker finds which user mapping owns it,
-resolves the PGP key for that mapping and writes the plaintext under
-_output/<username>/, outside any user's SFTP tree.
+resolves the PGP key for that mapping and writes the plaintext to a separate
+decrypted bucket under <username>/. Plaintext never shares a bucket with
+customer uploads, so it is never archived and never visible over SFTP.
 
 Error contract with SQS:
   - Objects that can never be processed (no owner, PGP off, not .pgp/.gpg,
@@ -25,7 +26,6 @@ from sftp_platform.domain import Mapping, SFTPUser, resolve_pgp
 
 MAX_BYTES = 10 * 1024 * 1024
 GPG_TIMEOUT = 20
-OUTPUT_ROOT = "_output"
 SECRET_NAMESPACE = "sftp/"
 PGP_SUFFIXES = (".pgp", ".gpg")
 
@@ -97,7 +97,7 @@ def decrypt(ciphertext: bytes, material: dict) -> bytes:
 
 def output_key(user: SFTPUser, key: str, etag: str) -> str:
     identity = sha256((key + "\0" + etag).encode()).hexdigest()
-    return f"{OUTPUT_ROOT}/{user.username}/{identity}.plain"
+    return f"{user.username}/{identity}.plain"
 
 
 def find_owner(users, bucket: str, key: str) -> tuple[SFTPUser, Mapping] | None:
@@ -109,9 +109,10 @@ def find_owner(users, bucket: str, key: str) -> tuple[SFTPUser, Mapping] | None:
     return None
 
 
-def process_object(bucket: str, key: str, etag: str, size: int, users, store, secrets) -> str:
+def process_object(bucket: str, key: str, etag: str, size: int, users, store, secrets,
+                   output_bucket: str) -> str:
     """Decrypt one uploaded object. Returns 'processed', 'skipped' or 'ignored'; raises on failure."""
-    if key.startswith(OUTPUT_ROOT + "/") or not key.endswith(PGP_SUFFIXES):
+    if not key.endswith(PGP_SUFFIXES):
         return "ignored"
     owner = find_owner(users, bucket, key)
     if owner is None:
@@ -121,10 +122,10 @@ def process_object(bucket: str, key: str, etag: str, size: int, users, store, se
     if user.status != "applied" or secret_ref is None:
         return "ignored"
     destination = output_key(user, key, etag)
-    if store.exists(bucket, destination):
+    if store.exists(output_bucket, destination):
         return "skipped"
     if size > MAX_BYTES:
         raise ValueError("size limit")
     encrypted = store.read(bucket, key, MAX_BYTES)
-    store.write(bucket, destination, decrypt(encrypted, secrets.get(secret_ref)))
+    store.write(output_bucket, destination, decrypt(encrypted, secrets.get(secret_ref)))
     return "processed"

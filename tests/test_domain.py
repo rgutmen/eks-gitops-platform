@@ -36,7 +36,7 @@ def test_rejects_bucket_outside_allowlist():
         validate(make_user(), ["other-bucket"])
 
 
-@pytest.mark.parametrize("prefix", ["../escape", "/absolute", "a//b", "a/../b", "a/*", "a/", "_output/x"])
+@pytest.mark.parametrize("prefix", ["../escape", "/absolute", "a//b", "a/../b", "a/*", "a/"])
 def test_rejects_unsafe_prefix(prefix):
     with pytest.raises(ValueError):
         validate(make_user(prefix=prefix), BUCKETS)

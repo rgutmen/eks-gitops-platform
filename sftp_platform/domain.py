@@ -24,7 +24,6 @@ USERNAME_RE = re.compile(r"[a-zA-Z0-9_][a-zA-Z0-9_-]{2,31}")
 PATH_RE = re.compile(r"[a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*")
 ENTRY_RE = re.compile(r"/(?:[a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*)?")
 SECRET_REF_RE = re.compile(r"sftp/[a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*")
-RESERVED_PREFIXES = {"_output"}
 ACCESS_LEVELS = {"read", "read-write"}
 PGP_OFF = "off"
 PGP_INHERIT = "inherit"
@@ -88,8 +87,6 @@ def _validate_mapping(user: SFTPUser, m: Mapping, buckets: list[str]) -> None:
         raise ValueError(f"Bucket not in allowlist: {m.bucket}")
     if not PATH_RE.fullmatch(m.prefix):
         raise ValueError(f"Invalid prefix: {m.prefix}")
-    if m.prefix.split("/")[0] in RESERVED_PREFIXES:
-        raise ValueError(f"Prefix is reserved: {m.prefix}")
     if m.access not in ACCESS_LEVELS:
         raise ValueError(f"Invalid access level: {m.access}")
     if m.pgp == PGP_INHERIT and not user.pgp_secret_ref:

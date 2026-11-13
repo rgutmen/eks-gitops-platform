@@ -10,6 +10,7 @@ from sftp_platform.worker import MAX_BYTES, S3Store, SecretStore, decrypt, outpu
 from tests.test_domain import make_user
 
 BUCKET = "sftp-inbound"
+OUTPUT = "sftp-decrypted"
 SECRET_REF = "sftp/alba/pgp"
 PLAINTEXT = b"invoice 2026-001\n"
 
@@ -48,6 +49,7 @@ def aws(monkeypatch):
     with mock_aws():
         s3 = boto3.client("s3")
         s3.create_bucket(Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": "eu-west-1"})
+        s3.create_bucket(Bucket=OUTPUT, CreateBucketConfiguration={"LocationConstraint": "eu-west-1"})
         yield s3, boto3.client("secretsmanager")
 
 
@@ -77,23 +79,23 @@ def test_process_decrypts_isolates_and_is_idempotent(aws, material):
     store, secrets = S3Store(s3), SecretStore(sm)
 
     valid = put(s3, "alba/inbox/valid.pgp", encrypted)
-    assert process_object(*valid, users, store, secrets) == "processed"
-    outputs = s3.list_objects_v2(Bucket=BUCKET, Prefix="_output/")["Contents"]
-    assert [o["Key"].split("/")[1] for o in outputs] == ["alba"]
-    assert s3.get_object(Bucket=BUCKET, Key=outputs[0]["Key"])["Body"].read() == PLAINTEXT
-    assert process_object(*valid, users, store, secrets) == "skipped"
+    assert process_object(*valid, users, store, secrets, OUTPUT) == "processed"
+    outputs = s3.list_objects_v2(Bucket=OUTPUT)["Contents"]
+    assert [o["Key"].split("/")[0] for o in outputs] == ["alba"]
+    assert s3.get_object(Bucket=OUTPUT, Key=outputs[0]["Key"])["Body"].read() == PLAINTEXT
+    assert process_object(*valid, users, store, secrets, OUTPUT) == "skipped"
 
-    assert process_object(*put(s3, "bruno/inbox/valid.pgp", encrypted), users, store, secrets) == "ignored"
-    assert process_object(*put(s3, "alba/inbox/notes.txt", b"x"), users, store, secrets) == "ignored"
-    assert process_object(*put(s3, "nobody/x.pgp", encrypted), users, store, secrets) == "ignored"
+    assert process_object(*put(s3, "bruno/inbox/valid.pgp", encrypted), users, store, secrets, OUTPUT) == "ignored"
+    assert process_object(*put(s3, "alba/inbox/notes.txt", b"x"), users, store, secrets, OUTPUT) == "ignored"
+    assert process_object(*put(s3, "nobody/x.pgp", encrypted), users, store, secrets, OUTPUT) == "ignored"
     with pytest.raises(subprocess.CalledProcessError):
-        process_object(*put(s3, "alba/inbox/corrupt.pgp", b"not pgp"), users, store, secrets)
+        process_object(*put(s3, "alba/inbox/corrupt.pgp", b"not pgp"), users, store, secrets, OUTPUT)
 
 
 def test_ignores_users_not_applied(aws):
     s3, sm = aws
     obj = put(s3, "alba/inbox/x.pgp", b"x")
-    assert process_object(*obj, [applied_user(status="pending")], S3Store(s3), SecretStore(sm)) == "ignored"
+    assert process_object(*obj, [applied_user(status="pending")], S3Store(s3), SecretStore(sm), OUTPUT) == "ignored"
 
 
 def test_oversized_object_raises_without_fetching_secret(aws):
@@ -107,7 +109,7 @@ def test_oversized_object_raises_without_fetching_secret(aws):
 
     secrets = Secrets()
     with pytest.raises(ValueError, match="size"):
-        process_object(BUCKET, "alba/inbox/large.pgp", "1", MAX_BYTES + 1, [applied_user()], S3Store(s3), secrets)
+        process_object(BUCKET, "alba/inbox/large.pgp", "1", MAX_BYTES + 1, [applied_user()], S3Store(s3), secrets, OUTPUT)
     assert secrets.requests == []
 
 
@@ -119,4 +121,4 @@ def test_secret_store_rejects_foreign_namespace(aws):
 def test_output_key_changes_with_etag():
     user = applied_user()
     assert output_key(user, "alba/inbox/a.pgp", "1") != output_key(user, "alba/inbox/a.pgp", "2")
-    assert output_key(user, "alba/inbox/a.pgp", "1").startswith("_output/alba/")
+    assert output_key(user, "alba/inbox/a.pgp", "1").startswith("alba/")
