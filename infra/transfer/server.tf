@@ -36,6 +36,10 @@ resource "aws_transfer_server" "sftp" {
   endpoint_type          = "VPC"
   security_policy_name   = "TransferSecurityPolicy-2024-01"
 
+  # Users are created by the admin web, not by OpenTofu. Without this the
+  # server cannot be destroyed while any client exists.
+  force_destroy = true
+
   endpoint_details {
     vpc_id                 = aws_vpc.this.id
     subnet_ids             = aws_subnet.public[*].id
