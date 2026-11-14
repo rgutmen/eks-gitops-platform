@@ -14,6 +14,7 @@ AWS Transfer Family) enforces the same rules before applying a change.
 """
 
 import base64
+import ipaddress
 import json
 import re
 import struct
@@ -27,6 +28,9 @@ SECRET_REF_RE = re.compile(r"sftp/[a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*")
 ACCESS_LEVELS = {"read", "read-write"}
 PGP_OFF = "off"
 PGP_INHERIT = "inherit"
+MAX_SSH_KEYS = 10
+MAX_CIDRS = 50
+MIN_CIDR_PREFIX = 16
 
 
 @dataclass
@@ -41,16 +45,40 @@ class Mapping:
 @dataclass
 class SFTPUser:
     username: str
-    ssh_public_key: str
+    ssh_public_keys: list[str] = field(default_factory=list)
     mappings: list[Mapping] = field(default_factory=list)
+    allowed_cidrs: list[str] = field(default_factory=list)
     pgp_secret_ref: str = ""
     status: str = "local"
 
 
 def user_from_dict(data: dict) -> SFTPUser:
     fields = dict(data)
+    # Records written before key rotation existed carry a single key.
+    legacy_key = fields.pop("ssh_public_key", None)
+    if legacy_key and not fields.get("ssh_public_keys"):
+        fields["ssh_public_keys"] = [legacy_key]
     fields["mappings"] = [Mapping(**m) for m in fields.get("mappings", [])]
     return SFTPUser(**fields)
+
+
+def normalize_cidr(value: str) -> str:
+    """Return a canonical public IPv4 CIDR, or raise ValueError.
+
+    A bare address becomes /32. Private, reserved and catch-all ranges are
+    rejected because the allowlist must name real client egress addresses.
+    """
+    try:
+        net = ipaddress.ip_network(value.strip(), strict=False)
+    except ValueError:
+        raise ValueError(f"Not an IPv4 address or CIDR: {value}") from None
+    if net.version != 4:
+        raise ValueError(f"Only IPv4 is supported: {value}")
+    if net.prefixlen < MIN_CIDR_PREFIX:
+        raise ValueError(f"Range too wide (minimum /{MIN_CIDR_PREFIX}): {value}")
+    if not net.is_global:
+        raise ValueError(f"Not a public address range: {value}")
+    return str(net)
 
 
 def resolve_pgp(user: SFTPUser, mapping: Mapping) -> str | None:
@@ -98,8 +126,22 @@ def _validate_mapping(user: SFTPUser, m: Mapping, buckets: list[str]) -> None:
 def validate(user: SFTPUser, buckets: list[str]) -> None:
     if not USERNAME_RE.fullmatch(user.username):
         raise ValueError("Invalid username")
-    if not valid_key(user.ssh_public_key):
-        raise ValueError("Invalid SSH public key (Ed25519 required)")
+    if not user.ssh_public_keys:
+        raise ValueError("User needs at least one SSH public key")
+    if len(user.ssh_public_keys) > MAX_SSH_KEYS:
+        raise ValueError(f"At most {MAX_SSH_KEYS} SSH public keys per user")
+    for key in user.ssh_public_keys:
+        if not valid_key(key):
+            raise ValueError("Invalid SSH public key (Ed25519 required)")
+    if len(set(user.ssh_public_keys)) != len(user.ssh_public_keys):
+        raise ValueError("Duplicate SSH public key")
+    if len(user.allowed_cidrs) > MAX_CIDRS:
+        raise ValueError(f"At most {MAX_CIDRS} allowed source addresses per user")
+    for cidr in user.allowed_cidrs:
+        if normalize_cidr(cidr) != cidr:
+            raise ValueError(f"Source address must be in canonical CIDR form: {cidr}")
+    if len(set(user.allowed_cidrs)) != len(user.allowed_cidrs):
+        raise ValueError("Duplicate source address")
     if user.pgp_secret_ref and not SECRET_REF_RE.fullmatch(user.pgp_secret_ref):
         raise ValueError("Default PGP secret reference outside the sftp/ namespace")
     if not user.mappings:

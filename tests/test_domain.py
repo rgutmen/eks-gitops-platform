@@ -13,7 +13,7 @@ KEY = "ssh-ed25519 " + base64.b64encode(
 
 def make_user(username="alba", prefix="alba/inbox", pgp="off", **overrides):
     mapping = Mapping("/inbox", "sftp-inbound", prefix, pgp=pgp)
-    return SFTPUser(username, KEY, [mapping], **overrides)
+    return SFTPUser(username, ssh_public_keys=[KEY], mappings=[mapping], **overrides)
 
 
 def test_valid_user_passes():
