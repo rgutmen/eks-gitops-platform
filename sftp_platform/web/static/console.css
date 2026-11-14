@@ -237,7 +237,7 @@ h1 { font-weight: 700; font-stretch: 80%; font-size: clamp(1.75rem, 1.2rem + 1.6
 .toolbar { display: flex; gap: var(--space-3); margin-bottom: var(--space-3); }
 .search { position: relative; flex: 1; max-width: 32rem; }
 .search .icon { position: absolute; left: var(--space-3); top: 50%; translate: 0 -50%; color: var(--ink-3); z-index: 1; pointer-events: none; }
-.search input { padding-left: 2.5rem; }
+.search input[type="search"] { padding-left: 2.5rem; }
 
 /* --- form controls ------------------------------------------------------- */
 
