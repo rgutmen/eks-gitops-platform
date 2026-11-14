@@ -25,6 +25,20 @@ variable "github_branch" {
   description = "Only workflows running on this branch can assume the push role."
 }
 
+variable "github_owner_id" {
+  type        = number
+  description = <<-EOT
+    Numeric GitHub owner ID. Repositories created after 2026-07-15 send an
+    immutable OIDC subject that embeds owner and repository IDs.
+    Get both with: gh api repos/OWNER/REPO --jq '.owner.id, .id'
+  EOT
+}
+
+variable "github_repository_id" {
+  type        = number
+  description = "Numeric GitHub repository ID (see github_owner_id)."
+}
+
 variable "repositories" {
   type        = list(string)
   default     = ["pgp-worker"]

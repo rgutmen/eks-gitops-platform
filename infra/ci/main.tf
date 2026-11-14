@@ -74,13 +74,21 @@ data "aws_iam_policy_document" "github_trust" {
       variable = "token.actions.githubusercontent.com:aud"
       values   = ["sts.amazonaws.com"]
     }
-    # Pull requests from forks never match: only pushes to this branch do.
+    # Immutable subject: repo:<owner>@<owner_id>/<repo>@<repo_id>:ref:refs/heads/<branch>.
+    # IDs never get reused, so a deleted or renamed repo cannot be impersonated.
+    # Pull requests and other branches never match.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:ref:refs/heads/${var.github_branch}"]
+      values   = [local.github_subject]
     }
   }
+}
+
+locals {
+  github_owner   = split("/", var.github_repository)[0]
+  github_repo    = split("/", var.github_repository)[1]
+  github_subject = "repo:${local.github_owner}@${var.github_owner_id}/${local.github_repo}@${var.github_repository_id}:ref:refs/heads/${var.github_branch}"
 }
 
 resource "aws_iam_role" "github_push" {

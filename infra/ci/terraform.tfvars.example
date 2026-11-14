@@ -7,6 +7,11 @@ name = "sftp-platform"
 github_repository = "your-github-user/eks-gitops-platform"
 github_branch     = "main"
 
+# Numeric IDs used by GitHub's immutable OIDC subject.
+# gh api repos/your-github-user/eks-gitops-platform --jq '.owner.id, .id'
+github_owner_id      = 12345678
+github_repository_id = 1234567890
+
 repositories     = ["pgp-worker"]
 keep_image_count = 30
 
