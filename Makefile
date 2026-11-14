@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := setup
 .PHONY: setup unit test \
-	infra-tfvars infra-validate infra-deploy infra-destroy \
+	infra-tfvars infra-validate infra-deploy infra-destroy kubeconfig \
 	deploy-sftp deploy-network deploy-eks deploy-workload-iam deploy-transfer \
 	destroy-sftp destroy-network destroy-eks destroy-workload-iam destroy-transfer
 export TMPDIR := $(CURDIR)/tmp
@@ -114,6 +114,13 @@ deploy-eks: deploy-network
 	$(require_backend)
 	$(call INIT,eks)
 	$(call TF,eks) apply -var 'region=$(REGION)' $(EKS_VARS)
+	$(MAKE) --no-print-directory kubeconfig
+
+# Point kubectl at the current cluster. Each new cluster gets a new API endpoint,
+# so this must run after every (re)creation.
+kubeconfig:
+	$(require_region)
+	aws eks update-kubeconfig --region $(REGION) --name "$$($(call TF,eks) output -raw cluster_name)"
 
 deploy-workload-iam: deploy-sftp deploy-eks
 	$(require_region)
