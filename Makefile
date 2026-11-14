@@ -39,6 +39,16 @@ TOFU      ?= tofu
 TF         = $(TOFU) -chdir=$(INFRA)/$(1)
 REGION    ?= $(AWS_REGION)
 
+# Remote state: shared settings in infra/backend.hcl, one key per stack.
+BACKEND_CONFIG := $(CURDIR)/$(INFRA)/backend.hcl
+STATE_PREFIX   ?= eks-gitops-platform
+# $(call INIT,stack)
+INIT = $(call TF,$(1)) init -input=false -backend-config=$(BACKEND_CONFIG) -backend-config=key=$(STATE_PREFIX)/$(1)/terraform.tfstate
+
+define require_backend
+	@test -f $(BACKEND_CONFIG) || (echo "Missing $(INFRA)/backend.hcl. Copy $(INFRA)/backend.hcl.example and set your state bucket."; exit 1)
+endef
+
 define require_region
 	@test -n "$(REGION)" || (echo "REGION is required, e.g. make $@ REGION=eu-west-1"; exit 1)
 endef
@@ -87,31 +97,36 @@ infra-destroy: destroy-transfer destroy-workload-iam destroy-eks destroy-network
 deploy-sftp:
 	$(require_region)
 	$(call require_tfvars,sftp)
-	$(call TF,sftp) init -input=false
+	$(require_backend)
+	$(call INIT,sftp)
 	$(call TF,sftp) apply -var 'region=$(REGION)'
 
 deploy-network:
 	$(require_region)
 	$(call require_tfvars,network)
-	$(call TF,network) init -input=false
+	$(require_backend)
+	$(call INIT,network)
 	$(call TF,network) apply -var 'region=$(REGION)'
 
 deploy-eks: deploy-network
 	$(require_region)
 	$(call require_tfvars,eks)
-	$(call TF,eks) init -input=false
+	$(require_backend)
+	$(call INIT,eks)
 	$(call TF,eks) apply -var 'region=$(REGION)' $(EKS_VARS)
 
 deploy-workload-iam: deploy-sftp deploy-eks
 	$(require_region)
 	$(call require_tfvars,workload-iam)
-	$(call TF,workload-iam) init -input=false
+	$(require_backend)
+	$(call INIT,workload-iam)
 	$(call TF,workload-iam) apply -var 'region=$(REGION)' $(WORKLOAD_IAM_VARS)
 
 deploy-transfer: deploy-sftp
 	$(require_region)
 	$(call require_tfvars,transfer)
-	$(call TF,transfer) init -input=false
+	$(require_backend)
+	$(call INIT,transfer)
 	$(call TF,transfer) apply -var 'region=$(REGION)' $(TRANSFER_VARS)
 
 destroy-transfer:

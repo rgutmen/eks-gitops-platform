@@ -1,5 +1,8 @@
 terraform {
-  required_version = ">= 1.8.0"
+  required_version = ">= 1.10.0"
+
+  # Settings come from infra/backend.hcl (see backend.hcl.example).
+  backend "s3" {}
 
   required_providers {
     aws = {

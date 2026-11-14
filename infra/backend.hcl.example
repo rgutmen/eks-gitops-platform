@@ -1,0 +1,8 @@
+# Remote state settings shared by every stack.
+# Copy to infra/backend.hcl (git-ignored) and set your bucket.
+# Each stack's state key is added by the Makefile: <key_prefix>/<stack>/terraform.tfstate
+
+bucket       = "your-state-bucket"
+region       = "eu-west-1"
+encrypt      = true
+use_lockfile = true # S3-native state locking, no DynamoDB table needed

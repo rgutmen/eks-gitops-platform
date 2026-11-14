@@ -31,3 +31,4 @@ crash.*.log
 .coverage
 htmlcov/
 .terraform.lock.hcl
+backend.hcl
