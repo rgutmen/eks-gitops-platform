@@ -1,0 +1,17 @@
+# KEDA Helm values. Chart: kedacore/keda (version pinned in the Makefile).
+# Only settings that differ from the chart defaults live here.
+#
+# The IRSA role ARN is account-specific and is passed at install time by
+# `make k8s-keda` from the workload-iam OpenTofu output.
+
+podIdentity:
+  aws:
+    irsa:
+      # The keda-operator ServiceAccount assumes the KEDA role, which can only
+      # read SQS queue depth. ScaledObjects use it via identityOwner: keda.
+      enabled: true
+      roleArn: "" # set by make k8s-keda
+
+# Run KEDA on the system node group, not on workload nodes.
+nodeSelector:
+  node-role: system

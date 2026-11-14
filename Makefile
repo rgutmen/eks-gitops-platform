@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := setup
 .PHONY: setup unit test \
-	infra-tfvars infra-validate infra-deploy infra-destroy kubeconfig k8s-config k8s-render \
+	infra-tfvars infra-validate infra-deploy infra-destroy kubeconfig k8s-config k8s-render k8s-keda \
 	deploy-sftp deploy-network deploy-eks deploy-workload-iam deploy-transfer \
 	destroy-sftp destroy-network destroy-eks destroy-workload-iam destroy-transfer
 export TMPDIR := $(CURDIR)/tmp
@@ -155,6 +155,21 @@ k8s-config:
 k8s-render:
 	@test -f $(WORKER_OVERLAY)/config.env || (echo "Missing config.env. Run: make k8s-config"; exit 1)
 	kubectl kustomize $(WORKER_OVERLAY)
+
+# --- Platform add-ons (Helm) --------------------------------------------------
+
+KEDA_CHART_VERSION ?= 2.21.0
+
+# Install or upgrade KEDA with its IRSA role from the workload-iam outputs.
+k8s-keda:
+	$(require_region)
+	helm repo add kedacore https://kedacore.github.io/charts --force-update >/dev/null
+	helm upgrade --install keda kedacore/keda \
+		--version $(KEDA_CHART_VERSION) \
+		--namespace keda --create-namespace \
+		--values platform/keda/values.yaml \
+		--set podIdentity.aws.irsa.roleArn="$$($(call TF,workload-iam) output -raw keda_role_arn)" \
+		--wait --timeout 5m
 
 deploy-workload-iam: deploy-sftp deploy-eks
 	$(require_region)
