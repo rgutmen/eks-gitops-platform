@@ -32,3 +32,5 @@ crash.*.log
 htmlcov/
 .terraform.lock.hcl
 backend.hcl
+k8s/**/config.env
+k8s/**/deploy.env

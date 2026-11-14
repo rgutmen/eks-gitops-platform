@@ -1,0 +1,33 @@
+# KEDA authenticates to AWS with its own IRSA role (queue depth only),
+# never with the worker's identity.
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-aws
+  namespace: sftp-platform
+spec:
+  podIdentity:
+    provider: aws
+    identityOwner: keda
+---
+# Scale pgp-worker from 0 to N on SQS queue depth.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: pgp-worker
+  namespace: sftp-platform
+spec:
+  scaleTargetRef:
+    name: pgp-worker
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  pollingInterval: 15 # seconds between queue checks
+  cooldownPeriod: 300 # seconds of empty queue before scaling to 0
+  triggers:
+    - type: aws-sqs-queue
+      authenticationRef:
+        name: keda-aws
+      metadata:
+        queueURL: QUEUE_URL # replaced by the overlay
+        awsRegion: AWS_REGION # replaced by the overlay
+        queueLength: "10" # target messages per pod
