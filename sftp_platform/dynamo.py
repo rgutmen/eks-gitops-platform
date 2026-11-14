@@ -14,9 +14,12 @@ lock expiry, so a stalled process can never resume after losing its lock.
 """
 
 import json
+import logging
 from dataclasses import asdict, replace
 
 from sftp_platform.domain import SFTPUser, check_constraints, user_from_dict, validate
+
+log = logging.getLogger(__name__)
 
 CATALOG_KEY = "catalog"
 MAX_DOCUMENT_BYTES = 300 * 1024
@@ -87,6 +90,7 @@ class DynamoCatalog:
             apply(pending)
             status = "applied"
         except Exception:
+            log.exception("Applying %s to AWS failed; marked as held", user.username)
             status = "failed"
         final = replace(pending, status=status)
         self._write(self.users | {user.username: final})

@@ -123,9 +123,14 @@ module "console" {
       actions   = ["transfer:DescribeServer"]
       resources = [var.transfer_server_arn]
     }
+    # CreateUser is authorized against the server, every other user call
+    # against the user ARN.
+    CreateUsers = {
+      actions   = ["transfer:CreateUser"]
+      resources = [var.transfer_server_arn]
+    }
     ManageUsers = {
       actions = [
-        "transfer:CreateUser",
         "transfer:UpdateUser",
         "transfer:DescribeUser",
         "transfer:DeleteUser",
