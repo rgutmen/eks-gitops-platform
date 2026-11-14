@@ -10,9 +10,14 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY sftp_platform ./sftp_platform
 
 FROM python:3.14-slim
+# Apply Debian security updates, add gpg, and remove pip: the worker never
+# installs packages at runtime and pip vendors its own outdated libraries.
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends gnupg \
     && rm -rf /var/lib/apt/lists/* \
+    && python -m pip uninstall -y pip \
+    && rm -f /usr/local/bin/pip* \
     && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin worker
 WORKDIR /app
 COPY --from=build /app /app

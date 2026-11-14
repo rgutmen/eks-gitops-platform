@@ -84,6 +84,7 @@ infra-tfvars:
 	done
 
 infra-validate:
+	@mkdir -p tmp
 	@for stack in $(STACKS); do \
 		echo "== $$stack"; \
 		$(TOFU) -chdir=$(INFRA)/$$stack fmt -check -recursive && \
