@@ -8,3 +8,7 @@ output "pgp_worker_role_arn" {
 output "keda_role_arn" {
   value = module.keda.arn
 }
+
+output "console_role_arn" {
+  value = module.console.arn
+}

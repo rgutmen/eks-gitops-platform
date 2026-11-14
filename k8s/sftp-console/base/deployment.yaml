@@ -1,0 +1,74 @@
+# Admin console. Same image as the PGP worker, started with the web entrypoint.
+# Not exposed outside the cluster: operators reach it with
+#   kubectl -n sftp-platform port-forward svc/sftp-console 8080:80
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sftp-console
+  namespace: sftp-platform
+spec:
+  # One replica: every write is guarded by the catalog revision, but a single
+  # writer keeps the security group pool free of concurrent rule placement.
+  replicas: 1
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sftp-console
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sftp-console
+    spec:
+      serviceAccountName: sftp-console
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: console
+          image: sftp-console # replaced by the overlay with the ECR image
+          command: ["uvicorn", "--factory", "sftp_platform.web.app:app_from_env",
+                    "--host", "0.0.0.0", "--port", "8080", "--no-server-header"]
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: sftp-console
+            - secretRef:
+                name: sftp-console
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              memory: 384Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 32Mi

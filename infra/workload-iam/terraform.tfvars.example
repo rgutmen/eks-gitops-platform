@@ -9,3 +9,4 @@ worker_service_account = "sftp-platform:pgp-worker"
 keda_service_account   = "keda:keda-operator"
 
 pgp_secret_prefix = "sftp/"
+web_service_account    = "sftp-platform:sftp-console"

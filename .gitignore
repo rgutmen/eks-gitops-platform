@@ -34,3 +34,4 @@ htmlcov/
 backend.hcl
 k8s/**/config.env
 k8s/**/deploy.env
+k8s/**/secret.env

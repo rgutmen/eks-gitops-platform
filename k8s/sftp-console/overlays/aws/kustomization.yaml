@@ -1,0 +1,53 @@
+# AWS overlay: injects account-specific values into the base manifests.
+# Inputs (git-ignored):
+#   config.env  application settings -> ConfigMap sftp-console  (make k8s-config)
+#   deploy.env  role ARN and image   -> local-only, never applied (make k8s-config)
+#   secret.env  operators and session key -> Secret sftp-console (make k8s-console-secret)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+configMapGenerator:
+  - name: sftp-console
+    namespace: sftp-platform
+    envs:
+      - config.env
+  - name: sftp-console-deploy
+    namespace: sftp-platform
+    envs:
+      - deploy.env
+    options:
+      annotations:
+        config.kubernetes.io/local-config: "true"
+
+secretGenerator:
+  - name: sftp-console
+    namespace: sftp-platform
+    envs:
+      - secret.env
+
+replacements:
+  - source:
+      kind: ConfigMap
+      name: sftp-console-deploy
+      fieldPath: data.CONSOLE_ROLE_ARN
+    targets:
+      - select:
+          kind: ServiceAccount
+          name: sftp-console
+        fieldPaths:
+          - metadata.annotations.[eks.amazonaws.com/role-arn]
+        options:
+          create: true
+  - source:
+      kind: ConfigMap
+      name: sftp-console-deploy
+      fieldPath: data.CONSOLE_IMAGE
+    targets:
+      - select:
+          kind: Deployment
+          name: sftp-console
+        fieldPaths:
+          - spec.template.spec.containers.[name=console].image

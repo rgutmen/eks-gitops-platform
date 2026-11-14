@@ -1,0 +1,13 @@
+# ClusterIP only. There is no Ingress or LoadBalancer for the console.
+apiVersion: v1
+kind: Service
+metadata:
+  name: sftp-console
+  namespace: sftp-platform
+spec:
+  selector:
+    app.kubernetes.io/name: sftp-console
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

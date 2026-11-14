@@ -30,3 +30,8 @@ output "host_key_fingerprint" {
   value       = aws_transfer_server.sftp.host_key_fingerprint
   description = "Share with clients so they can verify the server on first connection."
 }
+
+output "vpc_endpoint_id" {
+  value       = aws_transfer_server.sftp.endpoint_details[0].vpc_endpoint_id
+  description = "Endpoint the admin web attaches pool security groups to."
+}

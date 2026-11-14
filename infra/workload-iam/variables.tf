@@ -57,3 +57,31 @@ variable "pgp_secret_prefix" {
   default     = "sftp/"
   description = "Secrets Manager name prefix holding PGP keys."
 }
+
+# --- From the transfer stack --------------------------------------------------
+
+variable "transfer_server_arn" {
+  type        = string
+  description = "SFTP server ARN (transfer output server_arn)."
+}
+
+variable "transfer_user_role_arn" {
+  type        = string
+  description = "Role assigned to every SFTP user (transfer output user_access_role_arn)."
+}
+
+variable "transfer_vpc_id" {
+  type        = string
+  description = "VPC of the SFTP endpoint (transfer output vpc_id)."
+}
+
+variable "transfer_vpc_endpoint_id" {
+  type        = string
+  description = "SFTP VPC endpoint (transfer output vpc_endpoint_id)."
+}
+
+variable "web_service_account" {
+  type        = string
+  default     = "sftp-platform:sftp-console"
+  description = "namespace:serviceaccount allowed to assume the admin web role."
+}

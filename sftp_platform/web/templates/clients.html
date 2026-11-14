@@ -7,7 +7,10 @@
     <h1>Clients</h1>
     <p class="lede">{{ total }} SFTP client{{ "s" if total != 1 }} on manifest. Each change is applied to AWS Transfer Family and stamped with its result.</p>
   </div>
-  <a class="button primary" href="/clients/new">{% include "icons/plus.svg" %}<span>New client</span></a>
+  <div class="head-actions">
+    <a class="button" href="/clients.xlsx" download>{% include "icons/download.svg" %}<span>Export to Excel</span></a>
+    <a class="button primary" href="/clients/new">{% include "icons/plus.svg" %}<span>New client</span></a>
+  </div>
 </header>
 
 <section class="ledger" aria-label="Clearance summary">

@@ -20,6 +20,7 @@ import hmac
 import os
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Request
@@ -129,6 +130,18 @@ def create_app(console: Console, auth: Authenticator, settings: Settings) -> Fas
         template = "_register.html" if request.headers.get("HX-Request") else "clients.html"
         return render(request, template, users=shown, total=len(users), q=q,
                       capacity=console.capacity(), counts=_counts(users))
+
+    @app.get("/clients.xlsx")
+    def export_clients():
+        from sftp_platform.web.export import workbook
+
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+        return Response(
+            workbook(console.users(), settings.hostnames, STATUS_LABEL),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="sftp-clients-{stamp}.xlsx"',
+                     "Cache-Control": "no-store"},
+        )
 
     @app.get("/clients/new")
     def new_client(request: Request):
