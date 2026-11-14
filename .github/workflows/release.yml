@@ -1,0 +1,105 @@
+# Build, scan and publish the PGP worker image on every push to main.
+# AWS access uses GitHub OIDC: the push role trusts only this repository on main.
+#
+# Repository variables (Settings > Secrets and variables > Actions > Variables):
+#   AWS_ROLE_ARN  output github_push_role_arn of infra/ci
+#   AWS_REGION    region of the ECR repository
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  TRIVY_VERSION: v0.76.2
+  ECR_REPOSITORY: pgp-worker
+
+jobs:
+  image:
+    name: Build, scan and push pgp-worker
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # request the OIDC token for AWS
+      security-events: write # upload image scan results
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Image tag
+        id: meta
+        # Same 12-character SHA that `make k8s-config` uses.
+        run: echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          push: false
+          tags: ${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Gate: fixable HIGH or CRITICAL vulnerabilities stop the release.
+      - name: Scan image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: image
+          image-ref: ${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      # Full report for Code scanning, including findings below the gate.
+      - name: Image report
+        if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: image
+          image-ref: ${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}
+          format: sarif
+          output: trivy-image.sarif
+          exit-code: "0"
+          skip-setup-trivy: true
+
+      - name: Upload image report
+        if: always()
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      - name: AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: github-release-${{ github.run_id }}
+
+      - name: ECR login
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
+      - name: Push image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          docker tag "$ECR_REPOSITORY:$TAG" "$REGISTRY/$ECR_REPOSITORY:$TAG"
+          docker push "$REGISTRY/$ECR_REPOSITORY:$TAG"
+          echo "Pushed \`$REGISTRY/$ECR_REPOSITORY:$TAG\`" >> "$GITHUB_STEP_SUMMARY"
