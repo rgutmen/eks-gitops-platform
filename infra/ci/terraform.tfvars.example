@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars (git-ignored) and adjust. OpenTofu loads it automatically.
+# region comes from AWS_REGION through the Makefile.
+
+name = "sftp-platform"
+
+# Only workflows of this repository on this branch can push images.
+github_repository = "your-github-user/eks-gitops-platform"
+github_branch     = "main"
+
+repositories     = ["pgp-worker"]
+keep_image_count = 30
+
+# Keep false for real use. true lets destroy remove repositories with images.
+force_delete_repositories = false
