@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% set active = "clients" %}
+{% block title %}{{ user.username }}{% endblock %}
+{% block main %}
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/">{% include "icons/arrow-left.svg" %}Clients</a></nav>
+
+<header class="manifest-head">
+  <div class="manifest-title">
+    <h1>{{ user.username }}</h1>
+    <p class="lede">
+      {{ user.mappings | length }} folder{{ "s" if user.mappings | length != 1 }} ·
+      {{ user.allowed_cidrs | length }} source address{{ "es" if user.allowed_cidrs | length != 1 }} ·
+      {{ user.ssh_public_keys | length }} SSH key{{ "s" if user.ssh_public_keys | length != 1 }}
+    </p>
+  </div>
+  {% with status = user.status, big = true %}{% include "_stamp.html" %}{% endwith %}
+  <div class="manifest-actions">
+    {% if user.status == "failed" %}
+    <form method="post" action="/clients/{{ user.username }}/retry">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="button" type="submit">Retry apply</button>
+    </form>
+    {% endif %}
+    <a class="button primary" href="/clients/{{ user.username }}/edit"{% if user.status == "pending" %} aria-disabled="true" tabindex="-1"{% endif %}>{% include "icons/pencil.svg" %}<span>Edit manifest</span></a>
+  </div>
+</header>
+
+{% if error %}<div class="notice notice-error" role="alert">{% include "icons/circle-alert.svg" %}<p>{{ error }}</p></div>{% endif %}
+{% if request.query_params.get("saved") and user.status == "applied" %}
+<div class="notice notice-ok" role="status">{% include "icons/circle-check.svg" %}<p>Saved and applied to AWS Transfer Family.</p></div>
+{% elif user.status == "failed" %}
+<div class="notice notice-error" role="alert">{% include "icons/circle-alert.svg" %}<p>The last change did not reach AWS. The configuration below is stored; retry once AWS is reachable, or edit it.</p></div>
+{% elif user.status == "pending" %}
+<div class="notice notice-warn" role="status">{% include "icons/clock-3.svg" %}<p>A change is being applied. Editing is locked until it clears or is held.</p></div>
+{% endif %}
+
+<div class="manifest">
+  <section class="sheet sheet-wide" aria-labelledby="cargo-h">
+    <header class="sheet-head">
+      <h2 id="cargo-h">{% include "icons/folder-tree.svg" %}Cargo <span class="sheet-sub">Virtual folders the client sees</span></h2>
+    </header>
+    <table class="lines">
+      <thead>
+        <tr>
+          <th scope="col">Client sees</th>
+          <th scope="col">Stored in</th>
+          <th scope="col">Access</th>
+          <th scope="col">Decryption</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in user.mappings | sort(attribute="entry") %}
+        <tr>
+          <td><span class="mono strong">{{ m.entry }}</span></td>
+          <td><span class="mono"><span class="muted">s3://</span>{{ m.bucket }}/{{ m.prefix }}/</span></td>
+          <td>{% if m.access == "read" %}<span class="tag">Read only</span>{% else %}<span class="tag tag-ink">Read &amp; write</span>{% endif %}</td>
+          <td>
+            {% if m.pgp == pgp_off %}<span class="muted">Off</span>
+            {% elif m.pgp == pgp_inherit %}<span class="pgp-on">{% include "icons/lock.svg" %}Default key</span> <span class="mono muted">{{ user.pgp_secret_ref }}</span>
+            {% else %}<span class="pgp-on">{% include "icons/lock.svg" %}Folder key</span> <span class="mono muted">{{ m.pgp }}</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="sheet" aria-labelledby="ports-h">
+    <header class="sheet-head">
+      <h2 id="ports-h">{% include "icons/globe.svg" %}Ports of origin <span class="sheet-sub">Source addresses allowed on port 22</span></h2>
+    </header>
+    {% if user.allowed_cidrs %}
+    <ul class="chips">
+      {% for c in user.allowed_cidrs %}<li class="mono">{{ c }}</li>{% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No source addresses. This client cannot reach the endpoint until one is added.</p>
+    {% endif %}
+  </section>
+
+  <section class="sheet" aria-labelledby="seals-h">
+    <header class="sheet-head">
+      <h2 id="seals-h">{% include "icons/key-round.svg" %}Seals <span class="sheet-sub">SSH public keys (Ed25519)</span></h2>
+    </header>
+    <ol class="keys">
+      {% for k in user.ssh_public_keys %}
+      {% set parts = k.split() %}
+      <li>
+        <span class="mono key-body" title="{{ parts[1] }}">{{ parts[1][:10] }}…{{ parts[1][-12:] }}</span>
+        {% if parts | length > 2 %}<span class="muted">{{ parts[2:] | join(" ") }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+
+  <section class="sheet" aria-labelledby="pgp-h">
+    <header class="sheet-head">
+      <h2 id="pgp-h">{% include "icons/shield.svg" %}Decryption <span class="sheet-sub">PGP key references in Secrets Manager</span></h2>
+    </header>
+    <dl class="facts">
+      <div><dt>Default key</dt><dd>{% if user.pgp_secret_ref %}<span class="mono">{{ user.pgp_secret_ref }}</span>{% else %}<span class="muted">None</span>{% endif %}</dd></div>
+      <div><dt>Plaintext</dt><dd>Written to the decrypted bucket, never back to a client folder.</dd></div>
+    </dl>
+  </section>
+
+  {% if hostnames %}
+  <section class="sheet" aria-labelledby="connect-h">
+    <header class="sheet-head">
+      <h2 id="connect-h">{% include "icons/ship.svg" %}Connection <span class="sheet-sub">Send these to the client</span></h2>
+    </header>
+    <dl class="facts">
+      <div><dt>Host</dt><dd>{% for h in hostnames %}<span class="mono">{{ h }}</span>{% if not loop.last %}, {% endif %}{% endfor %}</dd></div>
+      <div><dt>Port</dt><dd><span class="mono">22</span></dd></div>
+      <div><dt>Username</dt><dd><span class="mono">{{ user.username }}</span></dd></div>
+    </dl>
+  </section>
+  {% endif %}
+</div>
+
+<details class="danger">
+  <summary>Remove client</summary>
+  <form method="post" action="/clients/{{ user.username }}/delete" class="danger-body">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="revision" value="{{ revision }}">
+    <p>Removes the Transfer user, its SSH keys and every source-address rule. Files already in S3 stay where they are.</p>
+    <label class="field">
+      <span class="field-label">Type <span class="mono">{{ user.username }}</span> to confirm</span>
+      <input name="confirm" autocomplete="off" required pattern="{{ user.username }}">
+    </label>
+    <button class="button danger-button" type="submit"{% if user.status == "pending" %} disabled{% endif %}>{% include "icons/trash-2.svg" %}<span>Remove {{ user.username }}</span></button>
+  </form>
+</details>
+{% endblock %}

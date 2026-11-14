@@ -86,8 +86,10 @@ class TransferUsers:
     def _describe(self, username: str) -> dict | None:
         try:
             return self.client.describe_user(ServerId=self.server_id, UserName=username)["User"]
-        except self.client.exceptions.ResourceNotFoundException:
-            return None
+        except self.client.exceptions.ClientError as exc:
+            if exc.response["Error"]["Code"] in ("ResourceNotFoundException", "UserNotFound"):
+                return None
+            raise
 
     def _reconcile_keys(self, user: SFTPUser, existing: dict) -> None:
         current = {_key_identity(k["SshPublicKeyBody"]): k["SshPublicKeyId"]

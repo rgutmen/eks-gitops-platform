@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false}'>
+  <title>{% block title %}Clients{% endblock %} · SFTP Console</title>
+  <link rel="preload" href="/static/fonts/archivo.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/console.css">
+  <script src="/static/js/theme.js"></script>
+  <script src="/static/js/htmx.min.js" defer></script>
+  <script src="/static/js/console.js" defer></script>
+</head>
+<body{% if operator %} class="has-rail"{% endif %}>
+  <a class="skip" href="#main">Skip to content</a>
+  {% if operator %}
+  <aside class="rail" aria-label="Console">
+    <a class="brand" href="/">
+      <span class="brand-mark" aria-hidden="true">{% include "icons/anchor.svg" %}</span>
+      <span class="brand-text"><strong>SFTP Console</strong><span>Client manifests</span></span>
+    </a>
+    <nav class="rail-nav" aria-label="Sections">
+      <a href="/" {% if active == "clients" %}aria-current="page"{% endif %}>
+        {% include "icons/package.svg" %}<span>Clients</span>
+      </a>
+      <a href="/clients/new" {% if active == "new" %}aria-current="page"{% endif %}>
+        {% include "icons/plus.svg" %}<span>New client</span>
+      </a>
+    </nav>
+    {% if hostnames %}
+    <section class="rail-block" aria-labelledby="endpoint-h">
+      <h2 id="endpoint-h">Endpoint</h2>
+      <ul class="mono-list">
+        {% for h in hostnames %}<li><span class="mono">{{ h }}</span><span class="muted">:22</span></li>{% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+    <div class="rail-foot">
+      <div class="theme-switch" role="radiogroup" aria-label="Theme">
+        <button type="button" role="radio" data-theme-choice="light" aria-checked="false" title="Light">{% include "icons/sun.svg" %}<span class="sr-only">Light</span></button>
+        <button type="button" role="radio" data-theme-choice="system" aria-checked="true" title="System">{% include "icons/monitor.svg" %}<span class="sr-only">System</span></button>
+        <button type="button" role="radio" data-theme-choice="dark" aria-checked="false" title="Dark">{% include "icons/moon.svg" %}<span class="sr-only">Dark</span></button>
+      </div>
+      <form method="post" action="/logout" class="signout">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <span class="operator" title="Signed in operator">{{ operator }}</span>
+        <button type="submit" class="icon-button" title="Sign out">{% include "icons/log-out.svg" %}<span class="sr-only">Sign out</span></button>
+      </form>
+    </div>
+  </aside>
+  {% endif %}
+  <main id="main" class="main" hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'>
+    {% block main %}{% endblock %}
+  </main>
+</body>
+</html>

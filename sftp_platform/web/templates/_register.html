@@ -1,0 +1,51 @@
+{% if users %}
+<table class="register">
+  <caption class="sr-only">SFTP clients</caption>
+  <thead>
+    <tr>
+      <th scope="col">Consignee</th>
+      <th scope="col">Cargo</th>
+      <th scope="col" class="num">Ports</th>
+      <th scope="col" class="num">Seals</th>
+      <th scope="col">Decryption</th>
+      <th scope="col" class="col-status">Clearance</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    {% set decrypting = u.mappings | rejectattr("pgp", "equalto", pgp_off) | list %}
+    <tr>
+      <th scope="row">
+        <a class="row-link" href="/clients/{{ u.username }}">{{ u.username }}</a>
+      </th>
+      <td>
+        <ul class="paths">
+          {% for m in u.mappings | sort(attribute="entry") %}
+          <li><span class="mono">{{ m.entry }}</span>{% if m.access == "read" %}<span class="tag">read</span>{% endif %}</li>
+          {% endfor %}
+        </ul>
+      </td>
+      <td class="num">{{ u.allowed_cidrs | length }}</td>
+      <td class="num">{{ u.ssh_public_keys | length }}</td>
+      <td>
+        {% if decrypting %}
+        <span class="pgp-on">{% include "icons/lock.svg" %}{{ decrypting | length }} of {{ u.mappings | length }}</span>
+        {% else %}<span class="muted">None</span>{% endif %}
+      </td>
+      <td class="col-status">{% with status = u.status %}{% include "_stamp.html" %}{% endwith %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% elif q %}
+<div class="empty">
+  <p class="empty-title">No client matches “{{ q }}”.</p>
+  <p>Search covers client names, visible folders, S3 prefixes and source addresses.</p>
+</div>
+{% else %}
+<div class="empty">
+  <p class="empty-title">No clients on manifest yet.</p>
+  <p>Create the first client with its SSH key, source addresses and folder layout. It is live on the SFTP endpoint as soon as it clears.</p>
+  <a class="button primary" href="/clients/new">{% include "icons/plus.svg" %}<span>New client</span></a>
+</div>
+{% endif %}

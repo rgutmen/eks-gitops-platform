@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Not found{% endblock %}
+{% block main %}
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/">{% include "icons/arrow-left.svg" %}Clients</a></nav>
+<div class="empty">
+  <p class="empty-title">No client named <span class="mono">{{ username }}</span>.</p>
+  <p>It may have been removed by another operator. The register lists every client on manifest.</p>
+  <a class="button" href="/">Back to clients</a>
+</div>
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% set active = "clients" if edit else "new" %}
+{% block title %}{{ "Edit " ~ draft.username if edit else "New client" }}{% endblock %}
+{% block main %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <a href="{{ '/clients/' ~ draft.username if edit else '/' }}">{% include "icons/arrow-left.svg" %}{{ draft.username if edit else "Clients" }}</a>
+</nav>
+
+<header class="page-head">
+  <div>
+    <h1>{{ "Edit " ~ draft.username if edit else "New client" }}</h1>
+    <p class="lede">{% if edit %}Changes are applied to AWS as soon as you save. Adding a key or address takes effect before anything is removed.{% else %}Declare the client's keys, source addresses and folder layout. Saving creates the Transfer user and opens its addresses on port 22.{% endif %}</p>
+  </div>
+</header>
+
+{% if error %}<div class="notice notice-error" role="alert">{% include "icons/circle-alert.svg" %}<p>{{ error }}</p></div>{% endif %}
+
+<form id="manifest-form" method="post" action="{{ '/clients/' ~ draft.username if edit else '/clients' }}" class="editor"
+      hx-post="/fragments/check" hx-trigger="input delay:500ms from:#manifest-form, change from:#manifest-form" hx-target="#check" hx-swap="innerHTML">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="revision" value="{{ revision }}">
+  <input type="hidden" name="edit" value="{{ '1' if edit else '0' }}">
+
+  <section class="sheet" aria-labelledby="consignee-h">
+    <header class="sheet-head"><h2 id="consignee-h">{% include "icons/package.svg" %}Consignee</h2></header>
+    <div class="grid-2">
+      <label class="field">
+        <span class="field-label">Username</span>
+        {% if edit %}
+        <input value="{{ draft.username }}" disabled aria-describedby="username-help">
+        <input type="hidden" name="username" value="{{ draft.username }}">
+        <span class="field-help" id="username-help">Usernames cannot change. Remove the client and create it again to rename.</span>
+        {% else %}
+        <input name="username" value="{{ draft.username }}" required minlength="3" maxlength="32"
+               pattern="[A-Za-z0-9_][A-Za-z0-9_\-]{2,31}" autocomplete="off" spellcheck="false" class="mono"
+               aria-describedby="username-help" autofocus>
+        <span class="field-help" id="username-help">3 to 32 letters, digits, <span class="mono">_</span> or <span class="mono">-</span>. The client signs in with it.</span>
+        {% endif %}
+      </label>
+      <label class="field">
+        <span class="field-label">Default PGP key <span class="optional">optional</span></span>
+        <input name="pgp_secret_ref" value="{{ draft.pgp_secret_ref }}" placeholder="sftp/{{ draft.username or 'client' }}/pgp"
+               pattern="sftp/[A-Za-z0-9_\-]+(/[A-Za-z0-9_\-]+)*" spellcheck="false" class="mono" aria-describedby="pgp-help">
+        <span class="field-help" id="pgp-help">Secrets Manager reference used by folders set to “Default key”. The key itself never passes through this console.</span>
+      </label>
+    </div>
+  </section>
+
+  <section class="sheet" aria-labelledby="seals-h">
+    <header class="sheet-head"><h2 id="seals-h">{% include "icons/key-round.svg" %}Seals <span class="sheet-sub">SSH public keys</span></h2></header>
+    <label class="field">
+      <span class="field-label">Ed25519 public keys, one per line</span>
+      <textarea name="ssh_public_keys" rows="3" required spellcheck="false" class="mono" aria-describedby="keys-help"
+                placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA… client@host">{{ draft.ssh_public_keys | join("\n") }}</textarea>
+      <span class="field-help" id="keys-help">To rotate, add the new key, confirm the client connects, then remove the old one.</span>
+    </label>
+  </section>
+
+  <section class="sheet" aria-labelledby="ports-h">
+    <header class="sheet-head"><h2 id="ports-h">{% include "icons/globe.svg" %}Ports of origin <span class="sheet-sub">Source addresses</span></h2></header>
+    <label class="field">
+      <span class="field-label">Public IPv4 addresses or CIDR ranges</span>
+      <textarea name="allowed_cidrs" rows="3" spellcheck="false" class="mono" aria-describedby="cidr-help"
+                placeholder="52.18.10.24&#10;34.240.12.0/28">{{ draft.allowed_cidrs | join("\n") }}</textarea>
+      <span class="field-help" id="cidr-help">One per line or separated by commas. A single address becomes <span class="mono">/32</span>. Private ranges and anything wider than <span class="mono">/16</span> are refused.</span>
+    </label>
+  </section>
+
+  <section class="sheet sheet-wide" aria-labelledby="cargo-h">
+    <header class="sheet-head">
+      <h2 id="cargo-h">{% include "icons/folder-tree.svg" %}Cargo <span class="sheet-sub">Virtual directory</span></h2>
+      <p class="sheet-note">Each row is a folder the client sees, backed by an S3 location no other client can share.</p>
+    </header>
+    <div class="cargo-head" aria-hidden="true">
+      <span>Client sees</span><span>Bucket</span><span>S3 prefix</span><span>Access</span><span>Decryption</span><span></span>
+    </div>
+    <div id="mappings" class="cargo">
+      {% for m in draft.mappings %}{% with i = loop.index0 %}{% include "_mapping.html" %}{% endwith %}{% endfor %}
+    </div>
+    <button type="button" class="button ghost add-row" hx-post="/fragments/mapping" hx-target="#mappings" hx-swap="beforeend"
+            hx-include="#next-index" data-add-mapping>
+      {% include "icons/plus.svg" %}<span>Add folder</span>
+    </button>
+    <input type="hidden" id="next-index" name="index" value="{{ draft.mappings | length }}" form="none">
+  </section>
+
+  <div class="submit-bar">
+    <div id="check" class="check" aria-live="polite"></div>
+    <div class="submit-actions">
+      <a class="button ghost" href="{{ '/clients/' ~ draft.username if edit else '/' }}">Cancel</a>
+      <button class="button primary" type="submit">{{ "Save and apply" if edit else "Create client" }}</button>
+    </div>
+  </div>
+</form>
+{% endblock %}

@@ -4,10 +4,16 @@ version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
     "boto3>=1.35,<2",
+    "fastapi>=0.163.0,<0.164",
+    "itsdangerous>=2.2.0,<3",
+    "jinja2>=3.1.6,<4",
+    "python-multipart>=0.0.33,<0.1",
+    "uvicorn>=0.54.0,<0.55",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28,<1",
     "moto[s3,secretsmanager]>=5,<6",
     "pytest>=8,<10",
 ]

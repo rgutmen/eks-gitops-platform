@@ -72,7 +72,7 @@ def test_catalog_create_edit_duplicate_and_reload(tmp_path):
 def test_catalog_rejects_overlapping_prefix(tmp_path):
     catalog = Catalog(tmp_path / "users.json", BUCKETS)
     catalog.save(make_user(prefix="team/alba"))
-    with pytest.raises(ValueError, match="overlaps"):
+    with pytest.raises(ValueError, match="share .* with client alba"):
         catalog.save(make_user("bruno", prefix="team/alba/child"))
     assert "bruno" not in catalog.users
 

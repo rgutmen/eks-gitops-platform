@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% set active = "clients" %}
+{% block title %}Clients{% endblock %}
+{% block main %}
+<header class="page-head">
+  <div>
+    <h1>Clients</h1>
+    <p class="lede">{{ total }} SFTP client{{ "s" if total != 1 }} on manifest. Each change is applied to AWS Transfer Family and stamped with its result.</p>
+  </div>
+  <a class="button primary" href="/clients/new">{% include "icons/plus.svg" %}<span>New client</span></a>
+</header>
+
+<section class="ledger" aria-label="Clearance summary">
+  <div class="ledger-cell">
+    <span class="ledger-label">Cleared</span>
+    <span class="ledger-value tone-cleared">{{ counts.applied }}</span>
+  </div>
+  <div class="ledger-cell">
+    <span class="ledger-label">Pending</span>
+    <span class="ledger-value tone-pending">{{ counts.pending }}</span>
+  </div>
+  <div class="ledger-cell">
+    <span class="ledger-label">Held</span>
+    <span class="ledger-value tone-held">{{ counts.failed }}</span>
+  </div>
+  <div class="ledger-cell ledger-capacity">
+    <span class="ledger-label">Allowlist capacity</span>
+    <span class="ledger-value"><span class="num">{{ capacity.rules_used }}</span><span class="of"> / {{ capacity.rules_total }} rules</span></span>
+    <span class="meter" role="meter" aria-label="Allowlist rules in use" aria-valuemin="0" aria-valuemax="{{ capacity.rules_total }}" aria-valuenow="{{ capacity.rules_used }}">
+      {% set pct = (capacity.rules_used * 100 / capacity.rules_total) if capacity.rules_total else 0 %}
+      <span class="meter-fill{% if pct >= 85 %} is-high{% endif %}" data-fill="{{ '%.1f'|format(pct) }}"></span>
+    </span>
+  </div>
+</section>
+
+<div class="toolbar">
+  <label class="search">
+    {% include "icons/search.svg" %}
+    <span class="sr-only">Search clients</span>
+    <input type="search" name="q" value="{{ q }}" placeholder="Search by client, folder, prefix or address"
+           hx-get="/" hx-trigger="input changed delay:200ms, search" hx-target="#register" hx-push-url="true"
+           autocomplete="off">
+  </label>
+</div>
+
+<div id="register">{% include "_register.html" %}</div>
+{% endblock %}

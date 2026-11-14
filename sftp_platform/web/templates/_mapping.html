@@ -1,0 +1,45 @@
+{% set custom = m.pgp not in (pgp_off, pgp_inherit) %}
+<fieldset class="cargo-row" data-row>
+  <legend class="sr-only">Folder {{ i + 1 }}</legend>
+  <label class="cell">
+    <span class="cell-label">Client sees</span>
+    <input name="mappings-{{ i }}-entry" value="{{ m.entry }}" placeholder="/inbox" required class="mono"
+           pattern="/([A-Za-z0-9_\-]+(/[A-Za-z0-9_\-]+)*)?" spellcheck="false">
+  </label>
+  <label class="cell">
+    <span class="cell-label">Bucket</span>
+    <select name="mappings-{{ i }}-bucket" class="mono">
+      {% for b in buckets %}<option value="{{ b }}"{% if b == m.bucket %} selected{% endif %}>{{ b }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="cell">
+    <span class="cell-label">S3 prefix</span>
+    <input name="mappings-{{ i }}-prefix" value="{{ m.prefix }}" placeholder="clients/acme/inbox" required class="mono"
+           pattern="[A-Za-z0-9_\-]+(/[A-Za-z0-9_\-]+)*" spellcheck="false">
+  </label>
+  <label class="cell">
+    <span class="cell-label">Access</span>
+    <select name="mappings-{{ i }}-access">
+      <option value="read-write"{% if m.access == "read-write" %} selected{% endif %}>Read &amp; write</option>
+      <option value="read"{% if m.access == "read" %} selected{% endif %}>Read only</option>
+    </select>
+  </label>
+  <div class="cell cell-pgp">
+    <label>
+      <span class="cell-label">Decryption</span>
+      <select name="mappings-{{ i }}-pgp" data-pgp-mode>
+        <option value="{{ pgp_off }}"{% if m.pgp == pgp_off %} selected{% endif %}>Off</option>
+        <option value="{{ pgp_inherit }}"{% if m.pgp == pgp_inherit %} selected{% endif %}>Default key</option>
+        <option value="custom"{% if custom %} selected{% endif %}>Folder key</option>
+      </select>
+    </label>
+    <label class="pgp-ref"{% if not custom %} hidden{% endif %}>
+      <span class="sr-only">Folder key reference</span>
+      <input name="mappings-{{ i }}-pgp_ref" value="{{ m.pgp if custom else m.get('pgp_ref', '') }}" placeholder="sftp/acme/partner"
+             class="mono" pattern="sftp/[A-Za-z0-9_\-]+(/[A-Za-z0-9_\-]+)*" spellcheck="false">
+    </label>
+  </div>
+  <button type="button" class="icon-button remove-row" data-remove-row title="Remove folder">
+    {% include "icons/x.svg" %}<span class="sr-only">Remove folder {{ i + 1 }}</span>
+  </button>
+</fieldset>

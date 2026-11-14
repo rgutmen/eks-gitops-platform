@@ -91,3 +91,25 @@ class DynamoCatalog:
         final = replace(pending, status=status)
         self._write(self.users | {user.username: final})
         return final
+
+    def delete(self, username: str, remove, expected_revision: int | None = None) -> None:
+        """Remove the user from AWS, then from the catalog.
+
+        On failure the user stays in the catalog marked failed, so nothing is
+        forgotten while AWS still holds part of it.
+        """
+        self.refresh()
+        if expected_revision is not None and expected_revision != self.revision:
+            raise Conflict("Catalog revision changed, reload and retry")
+        user = self.users.get(username)
+        if user is None:
+            raise ValueError("User does not exist")
+        if any(u.status == "pending" for u in self.users.values()):
+            raise Conflict("Catalog has a pending operation or needs manual recovery")
+        self._write(self.users | {username: replace(user, status="pending")})
+        try:
+            remove(username)
+        except Exception:
+            self._write(self.users | {username: replace(user, status="failed")})
+            raise
+        self._write({k: v for k, v in self.users.items() if k != username})

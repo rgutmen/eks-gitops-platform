@@ -169,7 +169,9 @@ def check_constraints(user: SFTPUser, users: dict[str, SFTPUser], edit: bool) ->
         for mine in user.mappings:
             for theirs in other.mappings:
                 if mine.bucket == theirs.bucket and overlaps(mine.prefix, theirs.prefix):
-                    raise ValueError(f"Mapping {mine.entry} overlaps with another user")
+                    raise ValueError(
+                        f"{mine.entry} would share s3://{mine.bucket}/{mine.prefix}/ with client "
+                        f"{other.username} ({theirs.entry} -> {theirs.prefix}/). Choose a prefix outside it.")
 
 
 class Catalog:
