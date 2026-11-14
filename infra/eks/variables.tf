@@ -11,8 +11,8 @@ variable "cluster_name" {
 
 variable "kubernetes_version" {
   type        = string
-  default     = "1.34"
-  description = "Kubernetes minor version."
+  default     = "1.37"
+  description = "Kubernetes minor version. EKS upgrades one minor version at a time."
 }
 
 variable "vpc_id" {
