@@ -19,7 +19,7 @@ env:
 jobs:
   test:
     name: Python tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,7 +38,7 @@ jobs:
 
   infra:
     name: OpenTofu validate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,7 +54,7 @@ jobs:
 
   security:
     name: Trivy (config, secrets, dependencies)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       security-events: write # upload results to Code scanning
