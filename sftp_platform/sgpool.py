@@ -85,7 +85,7 @@ class SecurityGroupPool:
         have = {r.cidr for r in current}
         wanted = set(cidrs)
         for cidr in sorted(wanted - have):
-            self._authorize(self._group_with_room(), username, cidr)
+            self._authorize(self._group_with_room(exclude=self._groups_with(cidr)), username, cidr)
         stale = [r for r in current if r.cidr not in wanted]
         self._revoke(stale)
 
@@ -110,15 +110,21 @@ class SecurityGroupPool:
         for group_id, rule_ids in by_group.items():
             self.ec2.revoke_security_group_ingress(GroupId=group_id, SecurityGroupRuleIds=rule_ids)
 
-    def _group_with_room(self) -> str:
+    def _groups_with(self, cidr: str) -> set[str]:
+        # A group cannot hold the same CIDR and port twice, even for different
+        # clients. A shared address goes into another group of the pool.
+        return {r.group_id for r in self.rules() if r.cidr == cidr}
+
+    def _group_with_room(self, exclude: set[str] = frozenset()) -> str:
         usage = self.usage()
         for group_id, used in sorted(usage.items()):
-            if used < self.rules_per_group:
+            if used < self.rules_per_group and group_id not in exclude:
                 return group_id
         if len(usage) >= self.max_groups:
             raise PoolExhausted(
-                f"All {len(usage)} allowlist groups are full ({self.rules_per_group} rules each). "
-                "Raise the security-groups-per-interface quota to extend the pool.")
+                f"All {len(usage)} allowlist groups are full or already allow this address "
+                f"({self.rules_per_group} rules each). Raise the security-groups-per-interface "
+                "quota to extend the pool.")
         return self._create_group(len(usage))
 
     def _create_group(self, index: int) -> str:
