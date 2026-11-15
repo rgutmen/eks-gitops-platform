@@ -24,6 +24,10 @@ module "eks" {
   # IAM Roles for Service Accounts.
   enable_irsa = true
 
+  # Control plane logs to CloudWatch, including scheduler and controller
+  # decisions (the module default omits those two).
+  enabled_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+
   # Cluster access through EKS access entries only.
   authentication_mode                      = "API"
   enable_cluster_creator_admin_permissions = false

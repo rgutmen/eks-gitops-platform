@@ -31,7 +31,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: console
-          image: sftp-console # replaced by the overlay with the ECR image
+          image: sftp-console:replaced-by-overlay # the overlay sets the ECR image and commit tag
           command: ["uvicorn", "--factory", "sftp_platform.web.app:app_from_env",
                     "--host", "0.0.0.0", "--port", "8080", "--no-server-header"]
           ports:
@@ -58,6 +58,7 @@ spec:
               cpu: 100m
               memory: 192Mi
             limits:
+              cpu: 500m
               memory: 384Mi
           securityContext:
             allowPrivilegeEscalation: false

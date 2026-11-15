@@ -1,0 +1,40 @@
+# Accepted Trivy findings. Each entry states why the default recommendation
+# does not apply to this platform. Used by the repository scan in ci.yml
+# (trivy fs --ignorefile .trivyignore.yaml).
+
+misconfigurations:
+  # --- Encryption with customer managed KMS keys -------------------------------
+  # Every resource is already encrypted at rest with AWS managed keys
+  # (SSE-S3, DynamoDB default encryption, ECR AES256, CloudWatch default).
+  # A customer managed key per resource adds cost and key administration
+  # without changing who can read the data: access is enforced by IAM.
+  - id: AWS-0132 # S3 buckets: customer managed keys
+    statement: SSE-S3 encryption with IAM-scoped access; no cross-account key policy needed.
+  - id: AWS-0025 # DynamoDB: customer managed key
+    statement: Default AWS owned key encryption; the table holds configuration, no credentials.
+  - id: AWS-0033 # ECR: customer managed key
+    statement: Images contain no secrets; AES256 encryption at rest is sufficient.
+  - id: AWS-0017 # CloudWatch log groups: customer managed key
+    statement: Transfer Family session logs, encrypted by CloudWatch by default.
+
+  # --- Logging ---------------------------------------------------------------
+  - id: AWS-0089 # S3 access logging
+    statement: S3 data events are available through CloudTrail when required; a separate log bucket per bucket is not kept.
+  - id: AWS-0178 # VPC flow logs
+    statement: Not enabled by default to avoid ingestion cost; enable per environment when traffic auditing is required.
+
+  # --- Data lifecycle ----------------------------------------------------------
+  - id: AWS-0090 # S3 versioning on the decrypted bucket
+    paths:
+      - infra/sftp/decrypted.tf
+    statement: Plaintext is short-lived by design (expires after decrypted_retention_days) and can be regenerated from the encrypted upload; versions would keep plaintext longer than intended.
+
+  # --- Network -----------------------------------------------------------------
+  - id: AWS-0104 # Unrestricted egress from EKS nodes
+    statement: Nodes run in private subnets behind a NAT gateway and need outbound HTTPS to AWS APIs and image registries; ingress stays restricted.
+
+  # --- Container image ---------------------------------------------------------
+  - id: DS-0026 # Dockerfile HEALTHCHECK
+    paths:
+      - Dockerfile
+    statement: Kubernetes probes define health; Docker HEALTHCHECK is ignored by the kubelet.
