@@ -29,7 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.datastructures import FormData
 
-from sftp_platform.domain import ACCESS_LEVELS, PGP_INHERIT, PGP_OFF, SFTPUser
+from sftp_platform.domain import ACCESS_LEVELS, PGP_INHERIT, PGP_OFF, SFTPUser, shared_addresses
 from sftp_platform.dynamo import Conflict
 from sftp_platform.sgpool import PoolExhausted
 from sftp_platform.web.auth import SESSION_COOKIE, Authenticator
@@ -220,6 +220,9 @@ def create_app(console: Console, auth: Authenticator, settings: Settings) -> Fas
             console.check(user, edit=edit)
         except ValueError as exc:
             return render(request, "_check.html", ok=False, message=str(exc))
+        shared = shared_addresses(user, console.catalog.users)
+        if shared:
+            return render(request, "_check.html", ok=True, warn=True, message=_shared_message(shared))
         return render(request, "_check.html", ok=True, message=_summary(user))
 
     async def _save(request: Request, edit: bool, username: str | None = None) -> Response:
@@ -230,6 +233,11 @@ def create_app(console: Console, auth: Authenticator, settings: Settings) -> Fas
         try:
             user = draft.to_user()
             console.check(user, edit=edit)
+            shared = shared_addresses(user, console.catalog.users)
+            if shared and form.get("accept_shared") != "1":
+                return render(request, "edit.html", status_code=409, draft=draft, edit=edit,
+                              revision=_int(form.get("revision")), shared=shared,
+                              shared_message=_shared_message(shared))
             saved = console.save(user, edit=edit, expected_revision=_int(form.get("revision")))
         except Conflict as exc:
             return render(request, "edit.html", status_code=409, draft=draft, edit=edit,
@@ -244,6 +252,12 @@ def create_app(console: Console, auth: Authenticator, settings: Settings) -> Fas
 
     app.include_router(protected)
     return app
+
+
+def _shared_message(shared: dict[str, list[str]]) -> str:
+    parts = [f"{cidr} is already allowed for {', '.join(owners)}" for cidr, owners in shared.items()]
+    return ("; ".join(parts) + ". Every client allowed from that address can reach port 22 from it. "
+            "Each client still needs its own SSH key to sign in.")
 
 
 def _draft(form: FormData) -> Draft:

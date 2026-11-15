@@ -1,4 +1,6 @@
-{% if ok %}
+{% if ok and warn %}
+<p class="check-warn">{% include "icons/circle-alert.svg" %}<span>{{ message }} You will be asked to accept this when saving.</span></p>
+{% elif ok %}
 <p class="check-ok">{% include "icons/circle-check.svg" %}<span>{{ message }}</span></p>
 {% else %}
 <p class="check-bad">{% include "icons/circle-alert.svg" %}<span>{{ message }}</span></p>

@@ -157,6 +157,23 @@ def validate(user: SFTPUser, buckets: list[str]) -> None:
                 raise ValueError(f"Mappings {a.entry} and {b.entry} point to overlapping S3 paths")
 
 
+def shared_addresses(user: SFTPUser, users: dict[str, SFTPUser]) -> dict[str, list[str]]:
+    """Addresses of `user` that other clients are also allowed from.
+
+    Sharing is permitted (several clients behind one NAT is common), but each
+    of those clients can then reach port 22 from that address, so the
+    operator must acknowledge it.
+    """
+    shared: dict[str, list[str]] = {}
+    for cidr in user.allowed_cidrs:
+        mine = ipaddress.ip_network(cidr)
+        owners = sorted(o.username for o in users.values() if o.username != user.username
+                        and any(mine.overlaps(ipaddress.ip_network(c)) for c in o.allowed_cidrs))
+        if owners:
+            shared[cidr] = owners
+    return shared
+
+
 def check_constraints(user: SFTPUser, users: dict[str, SFTPUser], edit: bool) -> None:
     """Uniqueness, edit target and no S3 path shared with another user."""
     if user.username in users and not edit:

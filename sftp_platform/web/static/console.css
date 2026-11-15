@@ -455,3 +455,7 @@ input.mono, textarea.mono, select.mono { font-family: var(--font-mono); font-siz
 
 .head-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 @media (max-width: 52rem) { .head-actions .button { flex: 1; } }
+
+.check-warn { color: var(--pending); }
+.shared-ack > div { display: grid; gap: var(--space-3); }
+.shared-ack .ack { display: flex; flex-wrap: wrap; gap: var(--space-2); }

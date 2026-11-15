@@ -14,6 +14,18 @@
 </header>
 
 {% if error %}<div class="notice notice-error" role="alert">{% include "icons/circle-alert.svg" %}<p>{{ error }}</p></div>{% endif %}
+{% if shared %}
+<div class="notice notice-warn shared-ack" role="alert">
+  {% include "icons/circle-alert.svg" %}
+  <div>
+    <p><strong>This address is already in use.</strong> {{ shared_message }}</p>
+    <div class="ack">
+      <button class="button primary" type="submit" form="manifest-form" name="accept_shared" value="1">Accept and {{ "save" if edit else "create client" }}</button>
+      <a class="button ghost" href="#allowed_cidrs">Change addresses</a>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <form id="manifest-form" method="post" action="{{ '/clients/' ~ draft.username if edit else '/clients' }}" class="editor"
       hx-post="/fragments/check" hx-trigger="input delay:500ms from:#manifest-form, change from:#manifest-form" hx-target="#check" hx-swap="innerHTML">
@@ -60,7 +72,7 @@
     <header class="sheet-head"><h2 id="ports-h">{% include "icons/globe.svg" %}Ports of origin <span class="sheet-sub">Source addresses</span></h2></header>
     <label class="field">
       <span class="field-label">Public IPv4 addresses or CIDR ranges</span>
-      <textarea name="allowed_cidrs" rows="3" spellcheck="false" class="mono" aria-describedby="cidr-help"
+      <textarea id="allowed_cidrs" name="allowed_cidrs" rows="3" spellcheck="false" class="mono" aria-describedby="cidr-help"
                 placeholder="52.18.10.24&#10;34.240.12.0/28">{{ draft.allowed_cidrs | join("\n") }}</textarea>
       <span class="field-help" id="cidr-help">One per line or separated by commas. A single address becomes <span class="mono">/32</span>. Private ranges and anything wider than <span class="mono">/16</span> are refused.</span>
     </label>
