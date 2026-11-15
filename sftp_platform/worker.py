@@ -12,15 +12,15 @@ Error contract with SQS:
   - Every other failure raises, so SQS retries the message and finally moves
     it to the dead-letter queue.
 
-Re-delivery is safe: the output key is derived from the source key and ETag,
-and an existing output is skipped.
+Re-delivery is safe: the plaintext keeps the uploaded name (minus .pgp/.gpg)
+and records the source ETag, so the same upload is skipped and a re-upload
+under the same name replaces it.
 """
 
 import json
 import re
 import subprocess
 import tempfile
-from hashlib import sha256
 from pathlib import Path
 
 from sftp_platform.domain import Mapping, SFTPUser, resolve_pgp
@@ -35,14 +35,15 @@ class S3Store:
     def __init__(self, client):
         self.client = client
 
-    def exists(self, bucket: str, key: str) -> bool:
+    def source_etag(self, bucket: str, key: str) -> str | None:
+        """ETag of the upload a plaintext object was decrypted from, or None if absent."""
         try:
-            self.client.head_object(Bucket=bucket, Key=key)
-            return True
+            head = self.client.head_object(Bucket=bucket, Key=key)
         except self.client.exceptions.ClientError as exc:
             if exc.response["Error"]["Code"] in ("404", "NoSuchKey"):
-                return False
+                return None
             raise
+        return head.get("Metadata", {}).get("source-etag", "")
 
     def read(self, bucket: str, key: str, maximum: int) -> bytes:
         response = self.client.get_object(Bucket=bucket, Key=key)
@@ -52,9 +53,11 @@ class S3Store:
             raise ValueError("size limit")
         return data
 
-    def write(self, bucket: str, key: str, data: bytes) -> None:
+    def write(self, bucket: str, key: str, data: bytes, source_etag: str) -> None:
+        # A re-upload with the same name replaces the previous plaintext.
         self.client.put_object(
-            Bucket=bucket, Key=key, Body=data, ServerSideEncryption="AES256", IfNoneMatch="*"
+            Bucket=bucket, Key=key, Body=data, ServerSideEncryption="AES256",
+            Metadata={"source-etag": source_etag.strip('"')},
         )
 
 
@@ -120,9 +123,18 @@ def decrypt(ciphertext: bytes, material: dict) -> bytes:
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, check=False)
 
 
-def output_key(user: SFTPUser, key: str, etag: str) -> str:
-    identity = sha256((key + "\0" + etag).encode()).hexdigest()
-    return f"{user.username}/{identity}.plain"
+def output_key(user: SFTPUser, mapping: Mapping, key: str) -> str:
+    """Plaintext path as the client sees it, without the .pgp/.gpg suffix.
+
+    alba uploading /inbox/2026/invoice.pdf.pgp -> alba/inbox/2026/invoice.pdf
+    """
+    relative = key[len(mapping.prefix) + 1:]
+    for suffix in PGP_SUFFIXES:
+        if relative.lower().endswith(suffix):
+            relative = relative[: -len(suffix)]
+            break
+    folder = mapping.entry.strip("/")
+    return "/".join(p for p in (user.username, folder, relative) if p)
 
 
 def find_owner(users, bucket: str, key: str) -> tuple[SFTPUser, Mapping] | None:
@@ -137,7 +149,7 @@ def find_owner(users, bucket: str, key: str) -> tuple[SFTPUser, Mapping] | None:
 def process_object(bucket: str, key: str, etag: str, size: int, users, store, secrets,
                    output_bucket: str) -> str:
     """Decrypt one uploaded object. Returns 'processed', 'skipped' or 'ignored'; raises on failure."""
-    if not key.endswith(PGP_SUFFIXES):
+    if not key.lower().endswith(PGP_SUFFIXES):
         return "ignored"
     owner = find_owner(users, bucket, key)
     if owner is None:
@@ -146,11 +158,11 @@ def process_object(bucket: str, key: str, etag: str, size: int, users, store, se
     secret_ref = resolve_pgp(user, mapping)
     if user.status != "applied" or secret_ref is None:
         return "ignored"
-    destination = output_key(user, key, etag)
-    if store.exists(output_bucket, destination):
+    destination = output_key(user, mapping, key)
+    if store.source_etag(output_bucket, destination) == etag.strip('"'):
         return "skipped"
     if size > MAX_BYTES:
         raise ValueError("size limit")
     encrypted = store.read(bucket, key, MAX_BYTES)
-    store.write(output_bucket, destination, decrypt(encrypted, secrets.get(secret_ref)))
+    store.write(output_bucket, destination, decrypt(encrypted, secrets.get(secret_ref)), etag)
     return "processed"

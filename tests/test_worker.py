@@ -78,12 +78,15 @@ def test_process_decrypts_isolates_and_is_idempotent(aws, material):
     users = [applied_user(), applied_user("bruno", "bruno/inbox", pgp="off")]
     store, secrets = S3Store(s3), SecretStore(sm)
 
-    valid = put(s3, "alba/inbox/valid.pgp", encrypted)
+    valid = put(s3, "alba/inbox/2026/valid.pdf.pgp", encrypted)
     assert process_object(*valid, users, store, secrets, OUTPUT) == "processed"
     outputs = s3.list_objects_v2(Bucket=OUTPUT)["Contents"]
-    assert [o["Key"].split("/")[0] for o in outputs] == ["alba"]
+    assert [o["Key"] for o in outputs] == ["alba/inbox/2026/valid.pdf"]
     assert s3.get_object(Bucket=OUTPUT, Key=outputs[0]["Key"])["Body"].read() == PLAINTEXT
     assert process_object(*valid, users, store, secrets, OUTPUT) == "skipped"
+    # A new upload under the same name (new ETag) replaces the plaintext.
+    bucket, key, _, size = valid
+    assert process_object(bucket, key, '"new-etag"', size, users, store, secrets, OUTPUT) == "processed"
 
     assert process_object(*put(s3, "bruno/inbox/valid.pgp", encrypted), users, store, secrets, OUTPUT) == "ignored"
     assert process_object(*put(s3, "alba/inbox/notes.txt", b"x"), users, store, secrets, OUTPUT) == "ignored"
@@ -118,7 +121,8 @@ def test_secret_store_rejects_foreign_namespace(aws):
         SecretStore(aws[1]).get("other/key")
 
 
-def test_output_key_changes_with_etag():
+def test_output_key_keeps_client_path_and_name():
     user = applied_user()
-    assert output_key(user, "alba/inbox/a.pgp", "1") != output_key(user, "alba/inbox/a.pgp", "2")
-    assert output_key(user, "alba/inbox/a.pgp", "1").startswith("alba/")
+    mapping = user.mappings[0]
+    assert output_key(user, mapping, "alba/inbox/a.pdf.pgp") == "alba/inbox/a.pdf"
+    assert output_key(user, mapping, "alba/inbox/x/y/report.csv.GPG") == "alba/inbox/x/y/report.csv"
