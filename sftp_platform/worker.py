@@ -17,6 +17,7 @@ and an existing output is skipped.
 """
 
 import json
+import re
 import subprocess
 import tempfile
 from hashlib import sha256
@@ -67,6 +68,30 @@ class SecretStore:
         return json.loads(self.client.get_secret_value(SecretId=reference)["SecretString"])
 
 
+ARMOR_RE = re.compile(r"(-----BEGIN PGP PRIVATE KEY BLOCK-----)(.*?)(-----END PGP PRIVATE KEY BLOCK-----)", re.S)
+
+
+def normalize_armor(key: str) -> str:
+    """Rebuild an ASCII-armored key whose line breaks were lost.
+
+    Pasting a key into a single-line field (the Secrets Manager console, a
+    JSON value) often turns newlines into spaces or literal "\\n". The base64
+    body and its "=" checksum survive, so the original layout can be restored.
+    A key that already has line breaks is returned unchanged.
+    """
+    key = key.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\r\n", "\n")
+    match = ARMOR_RE.search(key)
+    if match is None or "\n" in match.group(2).strip():
+        return key
+    tokens = match.group(2).split()
+    headers = [t for t in tokens if ":" in t]
+    if headers:  # "Version: x" style headers cannot be rebuilt reliably
+        return key
+    body = [t for t in tokens if not t.startswith("=")]
+    checksum = [t for t in tokens if t.startswith("=")]
+    return "\n".join([match.group(1), "", *body, *checksum, match.group(3), ""])
+
+
 def decrypt(ciphertext: bytes, material: dict) -> bytes:
     """Decrypt with a throwaway GnuPG home so no key material outlives the call."""
     if len(ciphertext) > MAX_BYTES:
@@ -79,7 +104,7 @@ def decrypt(ciphertext: bytes, material: dict) -> bytes:
         base = ["gpg", "--homedir", folder, "--batch", "--yes", "--no-tty"]
         quiet = dict(stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=GPG_TIMEOUT)
         try:
-            subprocess.run(base + ["--import"], input=material["private_key"].encode(), **quiet)
+            subprocess.run(base + ["--import"], input=normalize_armor(material["private_key"]).encode(), **quiet)
             subprocess.run(
                 base + ["--pinentry-mode", "loopback", "--passphrase-fd", "0",
                         "--max-output", str(MAX_BYTES), "--output", str(output),
